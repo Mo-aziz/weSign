@@ -1,0 +1,119 @@
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+
+export type AppUser = {
+  id: string;
+  username: string;
+  isDeaf: boolean;
+};
+
+export type Contact = {
+  id: string;
+  username: string;
+};
+
+type AppContextValue = {
+  user: AppUser | null;
+  contacts: Contact[];
+  darkMode: boolean;
+  login: (payload: { username: string; isDeaf: boolean }) => void;
+  logout: () => void;
+  addContact: (username: string) => { success: boolean; message?: string };
+  removeContact: (contactId: string) => void;
+  toggleDarkMode: () => void;
+  updateUser: (updates: Partial<Omit<AppUser, 'id'>>) => void;
+};
+
+const AppContext = createContext<AppContextValue | undefined>(undefined);
+
+const THEME_STORAGE_KEY = 'signlang.theme';
+
+const getInitialDarkMode = () => {
+  if (typeof window === 'undefined') return true;
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light') return false;
+  if (stored === 'dark') return true;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+};
+
+const defaultContacts: Contact[] = [
+  { id: 'mentor-7p39f1', username: 'mentor' },
+  { id: 'interpreter-h42km0', username: 'interpreter_bot' },
+  { id: 'friend-lm229v', username: 'friend_amelia' },
+];
+
+const generateUserId = (username: string) => {
+  const sanitized = username.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'user';
+  const uniquePart = Math.random().toString(36).slice(2, 8);
+  return `${sanitized}-${uniquePart}`;
+};
+
+export const AppContextProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>(defaultContacts);
+  const [darkMode, setDarkMode] = useState<boolean>(getInitialDarkMode);
+
+  useEffect(() => {
+    const root = document.documentElement.classList;
+    if (darkMode) {
+      root.add('dark');
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+    } else {
+      root.remove('dark');
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'light');
+    }
+  }, [darkMode]);
+
+  const login: AppContextValue['login'] = ({ username, isDeaf }) => {
+    const id = generateUserId(username);
+    setUser({ id, username, isDeaf });
+  };
+
+  const logout = () => {
+    setUser(null);
+  };
+
+  const addContact: AppContextValue['addContact'] = (username) => {
+    const trimmed = username.trim();
+    if (!trimmed) {
+      return { success: false, message: 'Enter a username before adding a contact.' };
+    }
+    const exists = contacts.some((contact) => contact.username.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      return { success: false, message: 'That contact is already saved.' };
+    }
+
+    const id = generateUserId(trimmed);
+    setContacts((prev) => [...prev, { id, username: trimmed }]);
+    return { success: true };
+  };
+
+  const removeContact: AppContextValue['removeContact'] = (contactId) => {
+    setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
+  };
+
+  const toggleDarkMode = () => {
+    setDarkMode((prev) => !prev);
+  };
+
+  const updateUser: AppContextValue['updateUser'] = (updates) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      return { ...prev, ...updates };
+    });
+  };
+
+  const value = useMemo<AppContextValue>(
+    () => ({ user, contacts, darkMode, login, logout, addContact, removeContact, toggleDarkMode, updateUser }),
+    [user, contacts, darkMode]
+  );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+};
+
+export const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within an AppContextProvider');
+  }
+  return context;
+};

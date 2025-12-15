@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  /* TailwindCSS @apply directives are transformed at build-time via PostCSS */
+  @apply bg-slate-100 text-slate-900 antialiased transition-colors duration-300 overflow-x-hidden;
+  @apply dark:bg-slate-950 dark:text-slate-100;
+}
+
+a {
+  @apply text-brand-600 hover:text-brand-500 transition-colors;
+  @apply dark:text-brand-500 dark:hover:text-brand-400;
+}
+
+.card-surface {
+  @apply bg-white/80 border border-slate-200 rounded-3xl shadow-lg backdrop-blur-lg;
+  @apply dark:bg-slate-900/80 dark:border-slate-800 dark:shadow-glow;
+}
+
+.input-field {
+  @apply w-full rounded-2xl border border-slate-300 bg-white/80 px-4 py-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/20;
+  @apply dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:ring-brand-500/30;
+}
+
+.mobile-nav {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mobile-nav::-webkit-scrollbar {
+  display: none;
+}
