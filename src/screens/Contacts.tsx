@@ -94,7 +94,7 @@ const Contacts = () => {
           <form className="space-y-3" onSubmit={handleAddContact}>
             <input
               className="input-field"
-              placeholder="username.handle"
+              placeholder="username.id"
               value={contactName}
               onChange={(event) => setContactName(event.target.value)}
             />

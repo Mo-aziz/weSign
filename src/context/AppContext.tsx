@@ -1,9 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+export type VoiceSettings = {
+  voiceName?: string;
+  rate?: number;
+  pitch?: number;
+};
+
 export type AppUser = {
   id: string;
   username: string;
   isDeaf: boolean;
+  avatar?: string;
+  status?: 'online' | 'offline' | 'away';
+  lastSeen?: string;
+  voiceSettings?: VoiceSettings;
 };
 
 export type Contact = {

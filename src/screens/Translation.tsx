@@ -1,54 +1,202 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useSignRecognitionService } from '../services/useSignRecognitionService';
-import { useSpeechToTextService } from '../services/useSpeechToTextService';
 import { useTextToSpeechService } from '../services/useTextToSpeechService';
-import { speak } from '../services/localTTS';
+import { startSpeechRecognition, stopSpeechRecognition } from '../services/localSpeechRecognition';
+
+type CaptionEntry = {
+  id: string;
+  text: string;
+  timestamp: number;
+};
 
 const Translation = () => {
   const { user } = useAppContext();
-  const [autoSpeak, setAutoSpeak] = useState(true);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const [autoListen, setAutoListen] = useState(true);
 
-  const signService = useSignRecognitionService({ cadenceMs: 6000 });
-  const speechService = useSpeechToTextService({ cadenceMs: 4500 });
+  // cadence so preview updates roughly every 5 seconds
+  const signService = useSignRecognitionService({ cadenceMs: 5000 });
   const ttsService = useTextToSpeechService();
 
+  const [signEditable, setSignEditable] = useState('');
+  const [isSignEditing, setIsSignEditing] = useState(false);
+
+  const [speechEditable, setSpeechEditable] = useState('');
+  const [isSpeechEditing, setIsSpeechEditing] = useState(false);
+  const [captionHistory, setCaptionHistory] = useState<CaptionEntry[]>([]);
+  const [isMicListening, setIsMicListening] = useState(false);
+  const recognitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFinalTranscriptRef = useRef<string>('');
+
+  const SPEECH_SAMPLE_SENTENCES = useMemo(
+    () => [
+      'The interpreter will join the meeting shortly.',
+      'Please look at the camera while you are signing.',
+      'We are testing the captioning workflow.',
+      'Can you confirm that the audio is clear?',
+      'This is a sample sentence for practice.',
+      'Thank you for using the translation studio.',
+    ],
+    []
+  );
+
+  const randomSpeechSample = () =>
+    SPEECH_SAMPLE_SENTENCES[Math.floor(Math.random() * SPEECH_SAMPLE_SENTENCES.length)];
+
+  // keep sign editable text in sync with preview when not actively editing
   useEffect(() => {
-    if (autoSpeak && signService.previewText) {
-      const entry = signService.confirmTranslation();
-      if (entry) {
-        // Use the local TTS service
-        speak(entry.text).catch(console.error);
+    if (signService.previewText && !isSignEditing) {
+      setSignEditable(signService.previewText);
+    }
+  }, [signService.previewText, isSignEditing]);
+
+  // auto-speak mode: automatically confirm + speak any new sign preview
+  useEffect(() => {
+    if (!autoSpeak || !signService.previewText) return;
+    const text = signService.previewText;
+    const entry = signService.confirmTranslation(text);
+    if (entry) {
+      // Use the user's voice settings when speaking
+      ttsService.speak(text, {
+        voiceSettings: {
+          voiceName: user?.voiceSettings?.voiceName,
+          rate: user?.voiceSettings?.rate,
+          pitch: user?.voiceSettings?.pitch,
+        }
+      });
+      setCaptionHistory((prev) => [
+        { id: entry.id, text, timestamp: entry.timestamp },
+        ...prev,
+      ]);
+    }
+  }, [autoSpeak, signService.previewText, signService, ttsService, user?.voiceSettings]);
+
+  // simulate speech-side test sentences every ~6 seconds
+  useEffect(() => {
+    if (!autoListen || isMicListening) return;
+    const interval = setInterval(() => {
+      if (isSpeechEditing) return;
+      const sample = randomSpeechSample();
+      setSpeechEditable(sample);
+      setCaptionHistory((prev) => [
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: sample,
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ]);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [autoListen, isSpeechEditing, isMicListening, randomSpeechSample]);
+
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      stopSpeechRecognition();
+      if (recognitionTimeoutRef.current) {
+        clearTimeout(recognitionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleMicToggle = async () => {
+    if (isMicListening) {
+      stopSpeechRecognition();
+      setIsMicListening(false);
+      lastFinalTranscriptRef.current = '';
+      if (recognitionTimeoutRef.current) {
+        clearTimeout(recognitionTimeoutRef.current);
+      }
+    } else {
+      setIsMicListening(true);
+      lastFinalTranscriptRef.current = '';
+      try {
+        await startSpeechRecognition(
+          {
+            continuous: true,
+            interimResults: true,
+            lang: 'en-US',
+          },
+          {
+            onResult: (result) => {
+              const currentTranscript = result.transcript;
+              const lastFinal = lastFinalTranscriptRef.current;
+              
+              // Extract only the new part (what came after the last final transcript)
+              let newPart = '';
+              if (lastFinal) {
+                // Find where the new content starts
+                if (currentTranscript.startsWith(lastFinal)) {
+                  newPart = currentTranscript.slice(lastFinal.length).trim();
+                } else {
+                  // If structure changed, use the whole current transcript
+                  newPart = currentTranscript.trim();
+                }
+              } else {
+                newPart = currentTranscript.trim();
+              }
+              
+              // Show only the new part in the text box (current sentence being spoken)
+              if (newPart || !result.isFinal) {
+                setSpeechEditable(newPart);
+                setIsSpeechEditing(true);
+              }
+              
+              // When we get a final result, extract and add only the new sentence(s)
+              if (result.isFinal && newPart) {
+                // Split by sentence endings and add each new sentence separately
+                const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+                
+                sentences.forEach((sentence) => {
+                  if (sentence.trim()) {
+                    setCaptionHistory((prev) => [
+                      {
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        text: sentence.trim(),
+                        timestamp: Date.now(),
+                      },
+                      ...prev,
+                    ]);
+                  }
+                });
+                
+                // Update the last final transcript to current full transcript
+                lastFinalTranscriptRef.current = currentTranscript;
+                
+                // Clear the text box immediately for the next sentence
+                setSpeechEditable('');
+                setIsSpeechEditing(false);
+              }
+            },
+            onError: (error) => {
+              console.error('Speech recognition error:', error);
+              setIsMicListening(false);
+              lastFinalTranscriptRef.current = '';
+            },
+            onEnd: () => {
+              setIsMicListening(false);
+              lastFinalTranscriptRef.current = '';
+            },
+          }
+        );
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error);
+        setIsMicListening(false);
+        lastFinalTranscriptRef.current = '';
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSpeak, signService.previewText]);
-
-  useEffect(() => {
-    if (autoListen) {
-      speechService.startListening();
-      return () => {
-        speechService.stopListening();
-      };
-    }
-    return undefined;
-  }, [autoListen, speechService]);
-
-  const transcriptSentences = useMemo(() => {
-    if (!speechService.transcript) return [] as string[];
-    return speechService.transcript.split('\n').filter(Boolean).slice(-6);
-  }, [speechService.transcript]);
+  };
 
   return (
     <div className="space-y-8">
       <header className="rounded-3xl border border-slate-200 bg-white/70 p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-glow">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">Translation studio</p>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white lg:text-3xl">Experiment with multimodal translation</h1>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white lg:text-3xl">Translation studio</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-              Simulate both sign-to-voice and speech-to-text workflows. Use this space to rehearse before joining a real call.
+              Simulate both sign-to-voice and speech-to-text workflows. You can use this space to communicate face to face with a signer.
             </p>
           </div>
           <div className="flex min-w-[220px] flex-col gap-2 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-400">
@@ -64,7 +212,9 @@ const Translation = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Sign → Text → Voice</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Practice signing and preview generated captions before broadcasting.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Practice signing and preview generated captions before broadcasting.
+                </p>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                 <label className="flex items-center gap-2">
@@ -76,8 +226,8 @@ const Translation = () => {
                     }`}
                   >
                     <span
-                      className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform duration-300 ${
-                        autoSpeak ? 'translate-x-5' : 'translate-x-0'
+                      className={`absolute left-1 top-1 h-5 w-4 rounded-full bg-white transition-transform duration-300 ${
+                        autoSpeak ? 'translate-x-3' : 'translate-x-0'
                       }`}
                     />
                   </button>
@@ -100,33 +250,50 @@ const Translation = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Live preview</p>
-                <div className="mt-2 h-40 overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200">
-                  {signService.previewText ?? 'Awaiting recognition...'}
+                <div className="mt-2 h-40 overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200">
+                  <textarea
+                    className="h-full w-full resize-none bg-transparent p-2 text-sm text-slate-700 outline-none dark:text-slate-200"
+                    value={signEditable}
+                    onChange={(e) => {
+                      setIsSignEditing(true);
+                      setSignEditable(e.target.value);
+                    }}
+                    placeholder="Awaiting recognition..."
+                  />
                 </div>
                 <div className="mt-3 flex gap-2 text-xs">
                   <button
-                    onClick={async () => {
-                      const entry = signService.confirmTranslation();
+                    onClick={() => {
+                      const text = signEditable || signService.previewText || '';
+                      const entry = signService.confirmTranslation(text);
                       if (entry) {
                         setAutoSpeak(false);
-                        try {
-                          await speak(entry.text);
-                        } catch (error) {
-                          console.error('Error speaking text:', error);
-                        }
+                        setIsSignEditing(false);
+                        ttsService.speak(entry.text);
+                        setCaptionHistory((prev) => [
+                          {
+                            id: entry.id,
+                            text: entry.text,
+                            timestamp: entry.timestamp,
+                          },
+                          ...prev,
+                        ]);
                       }
                     }}
-                    disabled={!signService.previewText}
+                    disabled={!signEditable && !signService.previewText}
                     className="flex-1 rounded-2xl bg-brand-600 px-3 py-2 font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
                   >
                     Confirm & speak
                   </button>
                   <button
-                    onClick={signService.rejectTranslation}
-                    disabled={!signService.previewText}
+                    onClick={() => {
+                      setSignEditable('');
+                      setIsSignEditing(false);
+                    }}
+                    disabled={!signEditable && !signService.previewText}
                     className="rounded-2xl border border-slate-300 px-3 py-2 font-semibold text-slate-600 transition hover:border-amber-500 hover:text-amber-500 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300"
                   >
-                    Reject
+                    Clear
                   </button>
                 </div>
                 {ttsService.lastUtterance && (
@@ -143,9 +310,14 @@ const Translation = () => {
                     </p>
                   )}
                   {signService.history.map((entry) => (
-                    <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
+                    <div
+                      key={entry.id}
+                      className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200"
+                    >
                       <p>{entry.text}</p>
-                      <p className="text-xs text-slate-400">{new Date(entry.timestamp).toLocaleTimeString()}</p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -166,9 +338,14 @@ const Translation = () => {
             <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
               {ttsService.queue.length === 0 && <li>No items awaiting playback.</li>}
               {ttsService.queue.map((item) => (
-                <li key={item.id} className="rounded-2xl border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                <li
+                  key={item.id}
+                  className="rounded-2xl border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                >
                   <p>{item.text}</p>
-                  <p className="text-xs text-slate-400">Queued {new Date(item.enqueuedAt).toLocaleTimeString()}</p>
+                  <p className="text-xs text-slate-400">
+                    Queued {new Date(item.enqueuedAt).toLocaleTimeString()}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -180,7 +357,9 @@ const Translation = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Speech → Real-time captions</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Simulate live captions for the signing participant.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Simulate live captions for the signing participant.
+                </p>
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                 <label className="flex items-center gap-2">
@@ -192,50 +371,91 @@ const Translation = () => {
                     }`}
                   >
                     <span
-                      className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white transition-transform duration-300 ${
-                        autoListen ? 'translate-x-5' : 'translate-x-0'
+                      className={`absolute left-1 top-1 h-5 w-4 rounded-full bg-white transition-transform duration-300 ${
+                        autoListen ? 'translate-x-3' : 'translate-x-0'
                       }`}
                     />
                   </button>
                 </label>
                 <button
-                  onClick={speechService.startListening}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300"
+                  onClick={handleMicToggle}
+                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                    isMicListening
+                      ? 'border-rose-500 bg-rose-500 text-white hover:bg-rose-600 dark:border-rose-400 dark:bg-rose-600'
+                      : 'border-slate-300 text-slate-600 hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300'
+                  }`}
                 >
-                  Start
+                  {isMicListening ? 'Stop mic' : 'Start mic'}
                 </button>
                 <button
-                  onClick={speechService.stopListening}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-rose-500 hover:text-rose-500 dark:border-slate-700 dark:text-slate-300"
+                  onClick={() => {
+                    const sample = randomSpeechSample();
+                    setSpeechEditable(sample);
+                    setIsSpeechEditing(false);
+                    setCaptionHistory((prev) => [
+                      {
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        text: sample,
+                        timestamp: Date.now(),
+                      },
+                      ...prev,
+                    ]);
+                  }}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300"
                 >
-                  Stop
+                  Add sample now
                 </button>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200">
-              {transcriptSentences.length === 0 ? (
-                <p>Listening for speech input...</p>
-              ) : (
-                transcriptSentences.map((line, index) => (
-                  <p key={`${line}-${index}`} className="mb-2">
-                    {line}
-                  </p>
-                ))
-              )}
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200 space-y-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Editable caption text
+                </p>
+                <textarea
+                  className="mt-2 h-24 w-full resize-none rounded-2xl border border-slate-200 bg-white/70 p-3 text-sm text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200"
+                  value={speechEditable}
+                  onChange={(e) => {
+                    setIsSpeechEditing(true);
+                    setSpeechEditable(e.target.value);
+                  }}
+                  placeholder={isMicListening ? "Listening... Speak into your microphone." : "Sample sentences will appear here every few seconds. Or click 'Start mic' to speak."}
+                />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Caption history
+                </p>
+                <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                  {captionHistory.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-400">
+                      Confirm text to see it here with timestamps.
+                    </p>
+                  ) : (
+                    captionHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-2xl border border-slate-200 bg-white/70 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200"
+                      >
+                        <p>{entry.text}</p>
+                        <p className="text-xs text-slate-400">
+                          {new Date(entry.timestamp).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex gap-2 text-xs">
               <button
-                onClick={speechService.clearTranscript}
+                onClick={() => {
+                  setCaptionHistory([]);
+                }}
                 className="rounded-2xl border border-slate-300 px-3 py-2 font-semibold text-slate-600 transition hover:border-amber-500 hover:text-amber-500 dark:border-slate-700 dark:text-slate-300"
               >
-                Clear transcript
-              </button>
-              <button
-                onClick={() => speechService.startListening()}
-                className="rounded-2xl bg-brand-600 px-3 py-2 font-semibold text-white transition hover:bg-brand-500"
-              >
-                Add sample
+                Clear captions
               </button>
             </div>
           </div>

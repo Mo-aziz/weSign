@@ -38,7 +38,14 @@ const loadVoices = (): Promise<SpeechSynthesisVoice[]> => {
   });
 };
 
-export const speak = async (text: string): Promise<void> => {
+export interface VoiceSettings {
+  voiceName?: string;
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+}
+
+export const speak = async (text: string, settings: VoiceSettings = {}): Promise<void> => {
   if (!isSpeechSynthesisSupported()) {
     console.warn('Web Speech API not supported in this browser');
     throw new Error('Text-to-speech not supported in this browser');
@@ -53,13 +60,21 @@ export const speak = async (text: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Set voice properties
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+    // Set voice properties from settings or use defaults
+    utterance.rate = settings.rate ?? 1.0;
+    utterance.pitch = settings.pitch ?? 1.0;
+    utterance.volume = settings.volume ?? 1.0;
 
-    // Select the best available voice
-    if (availableVoices.length > 0) {
+    // Set voice if specified in settings
+    if (settings.voiceName) {
+      const voice = availableVoices.find(v => v.name === settings.voiceName);
+      if (voice) {
+        utterance.voice = voice;
+      }
+    }
+
+    // If no voice selected, use default selection logic
+    if (!utterance.voice && availableVoices.length > 0) {
       // Prefer a local (non-remote) voice if available
       const localVoices = availableVoices.filter(v => v.localService);
       const preferredVoices = localVoices.length > 0 ? localVoices : availableVoices;

@@ -7,9 +7,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
+
+# Tauri build files
+src-tauri/target/
+src-tauri/**/*.rlib
+src-tauri/**/*.pdb
+src-tauri/**/*.rmeta
+
+# Local development
 *.local
 
 # Editor directories and files

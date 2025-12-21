@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
+import VoiceSettings from '../components/VoiceSettings';
 
 const Settings = () => {
   const { user, darkMode, toggleDarkMode, updateUser, logout } = useAppContext();
   const [username, setUsername] = useState(user?.username ?? '');
   const [isDeaf, setIsDeaf] = useState(user?.isDeaf ?? true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [voiceSettings, setVoiceSettings] = useState({
+    voiceName: user?.voiceSettings?.voiceName || '',
+    rate: user?.voiceSettings?.rate ?? 1.0,
+    pitch: user?.voiceSettings?.pitch ?? 1.0
+  });
 
   const handleSaveProfile = () => {
     if (!username.trim()) {
@@ -13,7 +19,15 @@ const Settings = () => {
       return;
     }
 
-    updateUser({ username: username.trim(), isDeaf });
+    updateUser({ 
+      username: username.trim(), 
+      isDeaf,
+      voiceSettings: {
+        voiceName: voiceSettings.voiceName,
+        rate: voiceSettings.rate,
+        pitch: voiceSettings.pitch
+      }
+    });
     setStatusMessage('Profile updated successfully.');
   };
 
@@ -70,6 +84,17 @@ const Settings = () => {
             Save profile
           </button>
           {statusMessage && <p className="text-xs text-brand-200">{statusMessage}</p>}
+        </div>
+
+        <div className="card-surface space-y-6 p-6">
+          <VoiceSettings 
+            onVoiceChange={(voice) => setVoiceSettings(prev => ({ ...prev, voiceName: voice.name }))}
+            onRateChange={(rate) => setVoiceSettings(prev => ({ ...prev, rate }))}
+            onPitchChange={(pitch) => setVoiceSettings(prev => ({ ...prev, pitch }))}
+            initialVoice={voiceSettings.voiceName}
+            initialRate={voiceSettings.rate}
+            initialPitch={voiceSettings.pitch}
+          />
         </div>
 
         <div className="card-surface space-y-6 p-6">

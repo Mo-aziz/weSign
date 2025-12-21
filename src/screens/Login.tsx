@@ -35,7 +35,7 @@ const Login = () => {
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-6 py-12 dark:bg-slate-950">
       <div className="w-full max-w-md space-y-8 card-surface p-10">
         <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">Sign Language Communicator</h1>
+          <h1 className="text-3xl font-semibold text-slate-900 italic dark:text-white">WE SIGN</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Connect seamlessly across signing and speaking communities.</p>
         </div>
 
@@ -47,7 +47,7 @@ const Login = () => {
             <input
               id="username"
               className="input-field"
-              placeholder="your.handle"
+              placeholder="your.userid"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
             />

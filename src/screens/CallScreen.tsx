@@ -12,6 +12,24 @@ const CallScreen = () => {
   const { user } = useAppContext();
   const contact = (state as { contact?: { username: string } })?.contact;
 
+  // Initialize speech synthesis
+  useEffect(() => {
+    const initSpeechSynthesis = () => {
+      // This will load the voices
+      window.speechSynthesis.getVoices();
+    };
+
+    // Some browsers need this event to be triggered to load voices
+    window.speechSynthesis.onvoiceschanged = initSpeechSynthesis;
+    initSpeechSynthesis();
+
+    return () => {
+      // Clean up
+      window.speechSynthesis.onvoiceschanged = null;
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
   const {
     startRecognition,
     stopRecognition,
@@ -30,11 +48,17 @@ const CallScreen = () => {
     transcript,
     history: transcriptHistory,
     isTyping
-  } = useSpeechToTextService();
+  } = useSpeechToTextService({
+    disableTTS: user?.isDeaf ?? false, // Disable TTS only for sign language users (they can't hear), enable for normal communicators
+    voiceSettings: user?.voiceSettings ? {
+      voiceName: user.voiceSettings.voiceName,
+      rate: user.voiceSettings.rate ?? 1.0,
+      pitch: user.voiceSettings.pitch ?? 1.0,
+    } : undefined
+  });
 
   const [isCallActive, setIsCallActive] = useState(true);
   const [confirmedText, setConfirmedText] = useState<string | null>(null);
-  const [lastSpokenText, setLastSpokenText] = useState<string | null>(null);
   const [editableText, setEditableText] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
@@ -52,12 +76,12 @@ const CallScreen = () => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [transcript, isTyping]);
+  }, [transcript, isTyping, transcriptHistory]);
 
   useEffect(() => {
     if (user?.isDeaf) {
       startRecognition();
-    } else {
+      // Also start listening so sign language user can see what the other communicator is saying
       startListening();
     }
 
@@ -87,82 +111,58 @@ const CallScreen = () => {
     return 'Capturing sign language via camera';
   }, [user?.isDeaf]);
 
+  // Handle start listening with proper speech synthesis cleanup
+  const handleStartListening = useCallback(() => {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    // Start listening
+    startListening();
+  }, [startListening]);
+
   const endCall = () => {
     setIsCallActive(false);
     stopRecognition();
     stopListening();
     stopSpeaking();
-    setLastSpokenText(null);
     setConfirmedText(null);
   };
 
-  // Auto-speak confirmed text with better error handling and state management
-  useEffect(() => {
-    let isMounted = true;
-    
-    const speakText = async () => {
-      if (!isCallActive || !confirmedText || confirmedText === lastSpokenText) {
-        return;
-      }
-      
-      setIsSpeaking(true);
-      setLastSpokenText(confirmedText);
-      
-      try {
-        console.log('Starting speech synthesis for:', confirmedText);
-        // Split text into sentences for more natural speech
-        const sentences = confirmedText.split(/(?<=[.!?])\s+/);
-        
-        for (const sentence of sentences) {
-          if (!isMounted) break;
-          if (!sentence.trim()) continue;
-          
-          console.log('Speaking:', sentence);
-          await speak(sentence);
-          
-          // Add a small pause between sentences
-          if (sentence !== sentences[sentences.length - 1]) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        }
-        
-        console.log('Speech synthesis completed successfully');
-      } catch (error) {
-        console.error('Error in speech synthesis:', error);
-        // Retry once after a short delay if there's an error
-        try {
-          console.log('Retrying speech synthesis...');
-          await new Promise(resolve => setTimeout(resolve, 300));
-          await speak(confirmedText);
-        } catch (retryError) {
-          console.error('Retry failed:', retryError);
-        }
-      } finally {
-        if (isMounted) {
-          setIsSpeaking(false);
-        }
-      }
-    };
-
-    // Only start speaking if we're not already speaking
-    if (!isSpeaking) {
-      speakText();
-    }
-    
-    return () => {
-      isMounted = false;
-      // Clean up any ongoing speech when component unmounts or dependencies change
-      window.speechSynthesis.cancel();
-    };
-  }, [confirmedText, isCallActive, lastSpokenText, isSpeaking]);
-
-  const handleConfirmTranslation = () => {
-    const entry = confirmTranslation();
+  const handleConfirmTranslation = async () => {
+    const entry = confirmTranslation(isEditing ? editableText : previewText ?? undefined);
     if (entry) {
       const textToConfirm = isEditing ? editableText : entry.text;
       setConfirmedText(textToConfirm);
       setLastUtterance(textToConfirm);
       setIsEditing(false);
+
+      // Speak the confirmed text immediately using the user's selected voice settings
+      if (!isCallActive) return;
+
+      setIsSpeaking(true);
+      try {
+        // Split text into sentences for more natural speech
+        const sentences = textToConfirm.split(/(?<=[.!?])\s+/);
+
+        for (const sentence of sentences) {
+          const trimmed = sentence.trim();
+          if (!trimmed) continue;
+
+          await speak(trimmed, {
+            voiceName: user?.voiceSettings?.voiceName,
+            rate: user?.voiceSettings?.rate ?? 1.0,
+            pitch: user?.voiceSettings?.pitch ?? 1.0,
+          });
+
+          // Small pause between sentences
+          if (sentence !== sentences[sentences.length - 1]) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          }
+        }
+      } catch (error) {
+        console.error('Error in speech synthesis for confirmed translation:', error);
+      } finally {
+        setIsSpeaking(false);
+      }
     }
   };
 
@@ -220,6 +220,23 @@ const CallScreen = () => {
               </div>
             )}
           </div>
+          
+          {/* Small area showing the other communicator's speech */}
+          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium text-slate-400">From {contact?.username || 'other communicator'}</p>
+            </div>
+            <div className="min-h-[3rem] max-h-24 overflow-y-auto">
+              {transcript ? (
+                <p className="text-xs text-slate-300">{transcript}</p>
+              ) : transcriptHistory.length > 0 ? (
+                <p className="text-xs text-slate-300">{transcriptHistory[0].text}</p>
+              ) : (
+                <p className="text-xs text-slate-500 italic">No speech detected yet...</p>
+              )}
+            </div>
+          </div>
+
           <div className="flex gap-3">
             <button
               onClick={handleConfirmTranslation}
@@ -247,24 +264,31 @@ const CallScreen = () => {
           <h3 className="text-lg font-semibold text-white">Live transcript</h3>
           <span className="text-xs text-slate-500">Shared in real time</span>
         </div>
+        {transcript && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-200">
+            <p className="text-xs uppercase tracking-wide text-amber-400">Speaking now</p>
+            <p className="mt-1">{transcript}</p>
+            {isTyping && <p className="text-xs text-slate-500">Playing audio...</p>}
+          </div>
+        )}
         <div
           ref={transcriptRef}
           className="h-52 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300 whitespace-pre-line"
         >
           {transcriptHistory && transcriptHistory.length > 0 ? (
-            transcriptHistory.map((entry, index) => (
+            transcriptHistory.map((entry) => (
               <div key={entry.id} className="mb-2">
                 <p className="text-slate-200">{entry.text}</p>
                 <p className="text-xs text-slate-500">{formatTimestamp(entry.timestamp)}</p>
               </div>
             ))
           ) : (
-            <p className="text-slate-400 italic">Listening for speech input...</p>
+            <p className="text-slate-400 italic">Listening to the sign language communicator....</p>
           )}
         </div>
         <div className="flex gap-3">
           <button
-            onClick={startListening}
+            onClick={handleStartListening}
             className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
           >
             Resume listening
@@ -288,7 +312,11 @@ const CallScreen = () => {
         </h3>
         <button
           onClick={() => {
-            clearHistory();
+            if (user?.isDeaf) {
+              clearHistory();
+            } else {
+              clearTranscript();
+            }
           }}
           className="text-xs text-slate-400 transition hover:text-slate-200"
         >
@@ -310,9 +338,18 @@ const CallScreen = () => {
             ))
           )
         ) : (
-          <p className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-500">
-            Transcripts appear here when the sign-language participant confirms a translation.
-          </p>
+          (transcriptHistory.length === 0 ? (
+            <p className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-500">
+              Press "Resume listening" to start the simulated transcript with audio. Finished sentences will appear here.
+            </p>
+          ) : (
+            transcriptHistory.map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-sm text-slate-200">{entry.text}</p>
+                <p className="text-xs text-slate-500">{formatTimestamp(entry.timestamp)}</p>
+              </div>
+            ))
+          ))
         )}
       </div>
     </div>

@@ -1,8 +1,11 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import { speak } from './localTTS';
+import type { VoiceSettings } from './localTTS';
 
 type SpeechToTextOptions = {
   cadenceMs?: number;
-  ttlMs?: number;
+  disableTTS?: boolean; // If true, don't speak the transcript (for sign language users who can't hear)
+  voiceSettings?: VoiceSettings; // Voice settings to use when speaking
 };
 
 type TranscriptEntry = {
@@ -24,161 +27,93 @@ const SAMPLE_RESPONSES = [
 const randomPhrase = () => SAMPLE_RESPONSES[Math.floor(Math.random() * SAMPLE_RESPONSES.length)];
 
 export const useSpeechToTextService = (options: SpeechToTextOptions = {}) => {
-  const cadence = options.cadenceMs ?? 5000;
-  const ttl = options.ttlMs ?? 30000; // 30 seconds default TTL
+  const cadence = options.cadenceMs ?? 6000;
+  const disableTTS = options.disableTTS ?? false;
+  const voiceSettings = options.voiceSettings;
   const [isListening, setIsListening] = useState(false);
   const [history, setHistory] = useState<TranscriptEntry[]>([]);
-  const [displayedTranscript, setDisplayedTranscript] = useState('');
-  const transcriptRef = useRef('');
+  const [transcript, setTranscript] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const phraseCountRef = useRef(0);
   const cadenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ttlTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const typewriterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Function to clear old entries based on TTL
-  const clearOldEntries = useCallback(() => {
-    const now = Date.now();
-    setHistory(prev => {
-      const filtered = prev.filter(entry => now - entry.timestamp < ttl);
-      return filtered.length === prev.length ? prev : filtered;
-    });
-  }, [ttl]);
-
-  // Update the reference immediately when history changes
+  const isListeningRef = useRef(false);
+  const voiceSettingsRef = useRef(voiceSettings);
+  
+  // Update voice settings ref when it changes
   useEffect(() => {
-    const newTranscript = history.map(entry => entry.text).join('\n');
-    transcriptRef.current = newTranscript;
-    
-    // Only update the displayed transcript if we're not currently typing
-    if (!isTyping) {
-      setDisplayedTranscript(newTranscript);
-    }
-  }, [history, isTyping]);
+    voiceSettingsRef.current = voiceSettings;
+  }, [voiceSettings]);
 
-  // Typewriter effect for the transcript
-  useEffect(() => {
-    if (transcriptRef.current === displayedTranscript) {
-      setIsTyping(false);
-      return;
-    }
-
-    setIsTyping(true);
-    
-    let currentIndex = 0;
-    const targetText = transcriptRef.current;
-    const currentText = displayedTranscript;
-    
-    // If the new text is shorter, just update immediately
-    if (targetText.length < currentText.length) {
-      setDisplayedTranscript(targetText);
-      setIsTyping(false);
-      return;
-    }
-    
-    // Find the common prefix
-    let commonPrefixLength = 0;
-    while (commonPrefixLength < currentText.length && 
-           commonPrefixLength < targetText.length && 
-           currentText[commonPrefixLength] === targetText[commonPrefixLength]) {
-      commonPrefixLength++;
-    }
-    
-    // Start typing from the end of the common prefix
-    currentIndex = commonPrefixLength;
-    
-    const typeNextChar = () => {
-      if (currentIndex < targetText.length) {
-        setDisplayedTranscript(targetText.substring(0, currentIndex + 1));
-        currentIndex++;
-        setTimeout(typeNextChar, Math.random() * 20 + 10); // Random typing speed between 10-30ms per character
-      } else {
-        setIsTyping(false);
-      }
-    };
-    
-    const timeoutId = setTimeout(typeNextChar, 50);
-    
-    return () => clearTimeout(timeoutId);
-  }, [transcriptRef.current, displayedTranscript]);
-
-  // Clean up timers on unmount
-  useEffect(() => {
-    return () => {
-      if (cadenceTimer.current) clearTimeout(cadenceTimer.current);
-      if (ttlTimer.current) clearInterval(ttlTimer.current);
-      if (typewriterTimer.current) clearTimeout(typewriterTimer.current);
-    };
-  }, []);
-
-  const stop = useCallback(() => {
+  const clearTimers = useCallback(() => {
     if (cadenceTimer.current) {
       clearTimeout(cadenceTimer.current);
       cadenceTimer.current = null;
     }
-    if (ttlTimer.current) {
-      clearInterval(ttlTimer.current);
-      ttlTimer.current = null;
-    }
-    if (typewriterTimer.current) {
-      clearTimeout(typewriterTimer.current);
-      typewriterTimer.current = null;
-    }
-    phraseCountRef.current = 0; // Reset phrase count when stopping
   }, []);
 
-  const startListening = useCallback(() => {
-    if (isListening) return;
-    
-    setIsListening(true);
-    
-    // Initial phrase
-    const initialEntry: TranscriptEntry = {
-      id: Date.now().toString(),
-      text: randomPhrase(),
-      timestamp: Date.now()
-    };
-    
-    setHistory([initialEntry]);
+  useEffect(() => () => clearTimers(), [clearTimers]);
 
-    const maxPhrases = 3; // Maximum number of phrases to show at once
-    
-    const addNewPhrase = () => {
-      if (phraseCountRef.current >= maxPhrases) {
-        // Remove the oldest phrase before adding a new one
-        setHistory(prev => {
-          const newHistory = [...prev];
-          newHistory.shift(); // Remove the oldest phrase
-          return newHistory;
-        });
-      } else {
-        phraseCountRef.current++;
+  const queueNextPhrase = useCallback(() => {
+    const nextDelay = cadence * (0.9 + Math.random() * 0.4); // ±20% variation
+    cadenceTimer.current = setTimeout(async () => {
+      if (!isListeningRef.current) return;
+      const phrase = randomPhrase();
+      setTranscript(phrase);
+      setIsTyping(true);
+
+      if (!disableTTS) {
+        try {
+          await speak(phrase, voiceSettingsRef.current);
+        } catch (err) {
+          console.error('TTS failed for transcript phrase:', err);
+        }
       }
-      
-      const newEntry: TranscriptEntry = {
-        id: Date.now().toString(),
-        text: randomPhrase(),
-        timestamp: Date.now()
-      };
-      
-      setHistory(prev => [...prev, newEntry]);
-      
-      // Schedule the next phrase with some randomness for more natural flow
-      const nextDelay = cadence * (0.8 + Math.random() * 0.4); // ±20% variation
-      cadenceTimer.current = setTimeout(addNewPhrase, nextDelay);
-    };
-    
-    // Initial delay before starting the first phrase
-    cadenceTimer.current = setTimeout(addNewPhrase, 1000);
 
-    // Set up TTL cleanup - check less frequently to reduce lag
-    ttlTimer.current = setInterval(clearOldEntries, 5000);
-  }, [cadence, clearOldEntries, isListening]);
+      setHistory((prev) => [...prev, { id: Date.now().toString(), text: phrase, timestamp: Date.now() }]);
+      setIsTyping(false);
+      queueNextPhrase();
+    }, nextDelay);
+  }, [cadence, disableTTS]);
+
+  const startListening = useCallback(() => {
+    if (isListeningRef.current) return;
+    isListeningRef.current = true;
+    setIsListening(true);
+    setTranscript('');
+    clearTimers();
+
+    // Start the first phrase a little after resume to feel natural
+    cadenceTimer.current = setTimeout(async () => {
+      if (!isListeningRef.current) return;
+      const phrase = randomPhrase();
+      setTranscript(phrase);
+      setIsTyping(true);
+
+      if (!disableTTS) {
+        try {
+          await speak(phrase, voiceSettingsRef.current);
+        } catch (err) {
+          console.error('TTS failed for transcript phrase:', err);
+        }
+      }
+
+      setHistory((prev) => [...prev, { id: Date.now().toString(), text: phrase, timestamp: Date.now() }]);
+      setIsTyping(false);
+      queueNextPhrase();
+    }, 800);
+  }, [clearTimers, queueNextPhrase, disableTTS]);
 
   const stopListening = useCallback(() => {
+    isListeningRef.current = false;
     setIsListening(false);
-    stop();
-  }, [stop]);
+    setTranscript('');
+    setIsTyping(false);
+    clearTimers();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (err) {
+      console.warn('Unable to cancel speech synthesis:', err);
+    }
+  }, [clearTimers]);
 
   const clearTranscript = useCallback(() => {
     setHistory([]);
@@ -187,11 +122,11 @@ export const useSpeechToTextService = (options: SpeechToTextOptions = {}) => {
   const state = useMemo(
     () => ({
       isListening,
-      transcript: displayedTranscript,
+      transcript,
       history,
       isTyping,
     }),
-    [isListening, displayedTranscript, history, isTyping]
+    [isListening, transcript, history, isTyping]
   );
 
   return {

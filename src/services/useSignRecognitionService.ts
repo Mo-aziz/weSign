@@ -66,11 +66,12 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
     setIsCapturing(false);
   }, []);
 
-  const confirmTranslation = useCallback(() => {
-    if (!previewText) return null;
+  const confirmTranslation = useCallback((overrideText?: string) => {
+    const text = (overrideText ?? previewText)?.trim();
+    if (!text) return null;
     const entry: RecognitionHistoryEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      text: previewText,
+      text,
       timestamp: Date.now(),
     };
     setHistory((prev) => [entry, ...prev].slice(0, 15));
