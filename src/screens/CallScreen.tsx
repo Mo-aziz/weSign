@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { useSignRecognitionService } from '../services/useSignRecognitionService';
 import { speak } from '../services/localTTS';
@@ -7,29 +7,68 @@ import { useSpeechToTextService } from '../services/useSpeechToTextService';
 
 const formatTimestamp = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
 
+interface LocationState {
+  contact?: {
+    id: string;
+    username: string;
+  };
+}
+
 const CallScreen = () => {
   const { state } = useLocation();
-  const { user } = useAppContext();
-  const contact = (state as { contact?: { username: string } })?.contact;
+  const navigate = useNavigate();
+  const contact = (state as LocationState)?.contact;
+  
+  const { 
+    user, 
+    callState, 
+    currentCall, 
+    localStream, 
+    remoteStream,
+    endCall: contextEndCall,
+    sendTranslation,
+    sendTranscript,
+    translationMessages,
+    transcriptMessages,
+    isCameraEnabled,
+    isMicEnabled,
+    toggleCamera,
+    toggleMic
+  } = useAppContext();
+
+  // Video refs
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   // Initialize speech synthesis
   useEffect(() => {
     const initSpeechSynthesis = () => {
-      // This will load the voices
       window.speechSynthesis.getVoices();
     };
 
-    // Some browsers need this event to be triggered to load voices
     window.speechSynthesis.onvoiceschanged = initSpeechSynthesis;
     initSpeechSynthesis();
 
     return () => {
-      // Clean up
       window.speechSynthesis.onvoiceschanged = null;
       window.speechSynthesis.cancel();
     };
   }, []);
 
+  // Set up video streams
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
+  // Sign recognition service (for deaf users)
   const {
     startRecognition,
     stopRecognition,
@@ -39,8 +78,14 @@ const CallScreen = () => {
     previewText,
     history,
   } = useSignRecognitionService();
+
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastUtterance, setLastUtterance] = useState('');
+  const [editableText, setEditableText] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [confirmedText, setConfirmedText] = useState<string | null>(null);
+
+  // Speech-to-text service (for non-deaf users)
   const {
     startListening,
     stopListening,
@@ -49,7 +94,7 @@ const CallScreen = () => {
     history: transcriptHistory,
     isTyping
   } = useSpeechToTextService({
-    disableTTS: user?.isDeaf ?? false, // Disable TTS only for sign language users (they can't hear), enable for normal communicators
+    disableTTS: user?.isDeaf ?? false,
     voiceSettings: user?.voiceSettings ? {
       voiceName: user.voiceSettings.voiceName,
       rate: user.voiceSettings.rate ?? 1.0,
@@ -57,46 +102,49 @@ const CallScreen = () => {
     } : undefined
   });
 
-  const [isCallActive, setIsCallActive] = useState(true);
-  const [confirmedText, setConfirmedText] = useState<string | null>(null);
-  const [editableText, setEditableText] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-
   const previewRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll
   useEffect(() => {
     if (previewText && previewRef.current) {
       previewRef.current.scrollTo({ top: previewRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [previewText]);
 
-  // Auto-scroll transcript when it updates
   useEffect(() => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [transcript, isTyping, transcriptHistory]);
 
+  // Start services when call is connected
   useEffect(() => {
-    if (user?.isDeaf) {
-      startRecognition();
-      // Also start listening so sign language user can see what the other communicator is saying
-      startListening();
+    if (callState === 'connected') {
+      if (user?.isDeaf) {
+        startRecognition();
+        startListening();
+      } else {
+        startListening();
+      }
     }
 
     return () => {
       stopRecognition();
       stopListening();
-      stopSpeaking();
     };
-  }, [startRecognition, stopRecognition, startListening, stopListening, user?.isDeaf]);
+  }, [callState, user?.isDeaf, startRecognition, stopRecognition, startListening, stopListening]);
+
+  // Send transcript when speech is detected (for non-deaf users)
+  useEffect(() => {
+    if (!user?.isDeaf && transcript && callState === 'connected') {
+      sendTranscript(transcript);
+    }
+  }, [transcript, user?.isDeaf, callState, sendTranscript]);
 
   const stopSpeaking = useCallback(() => {
     try {
-      // Stop any ongoing speech
       window.speechSynthesis.cancel();
-      console.log('Speech synthesis stopped');
     } catch (error) {
       console.error('Error stopping speech synthesis:', error);
     } finally {
@@ -104,29 +152,15 @@ const CallScreen = () => {
     }
   }, []);
 
-  const callHeader = useMemo(() => {
-    if (!user?.isDeaf) {
-      return 'Listening via microphone';
-    }
-    return 'Capturing sign language via camera';
-  }, [user?.isDeaf]);
-
-  // Handle start listening with proper speech synthesis cleanup
-  const handleStartListening = useCallback(() => {
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-    // Start listening
-    startListening();
-  }, [startListening]);
-
-  const endCall = () => {
-    setIsCallActive(false);
+  const handleEndCall = () => {
+    contextEndCall();
     stopRecognition();
     stopListening();
     stopSpeaking();
-    setConfirmedText(null);
+    navigate('/contacts');
   };
 
+  // Handle confirm translation (for deaf users)
   const handleConfirmTranslation = async () => {
     const entry = confirmTranslation(isEditing ? editableText : previewText ?? undefined);
     if (entry) {
@@ -135,33 +169,34 @@ const CallScreen = () => {
       setLastUtterance(textToConfirm);
       setIsEditing(false);
 
-      // Speak the confirmed text immediately using the user's selected voice settings
-      if (!isCallActive) return;
+      // Send translation to the other user via data channel
+      sendTranslation(textToConfirm, true);
 
-      setIsSpeaking(true);
-      try {
-        // Split text into sentences for more natural speech
-        const sentences = textToConfirm.split(/(?<=[.!?])\s+/);
+      // Speak the text
+      if (callState === 'connected') {
+        setIsSpeaking(true);
+        try {
+          const sentences = textToConfirm.split(/(?<=[.!?])\s+/);
 
-        for (const sentence of sentences) {
-          const trimmed = sentence.trim();
-          if (!trimmed) continue;
+          for (const sentence of sentences) {
+            const trimmed = sentence.trim();
+            if (!trimmed) continue;
 
-          await speak(trimmed, {
-            voiceName: user?.voiceSettings?.voiceName,
-            rate: user?.voiceSettings?.rate ?? 1.0,
-            pitch: user?.voiceSettings?.pitch ?? 1.0,
-          });
+            await speak(trimmed, {
+              voiceName: user?.voiceSettings?.voiceName,
+              rate: user?.voiceSettings?.rate ?? 1.0,
+              pitch: user?.voiceSettings?.pitch ?? 1.0,
+            });
 
-          // Small pause between sentences
-          if (sentence !== sentences[sentences.length - 1]) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            if (sentence !== sentences[sentences.length - 1]) {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
           }
+        } catch (error) {
+          console.error('Error in speech synthesis:', error);
+        } finally {
+          setIsSpeaking(false);
         }
-      } catch (error) {
-        console.error('Error in speech synthesis for confirmed translation:', error);
-      } finally {
-        setIsSpeaking(false);
       }
     }
   };
@@ -171,25 +206,75 @@ const CallScreen = () => {
     rejectTranslation();
   };
 
-  const activeStatus = isCallActive ? 'Live call in progress' : 'Call ended';
+  const handleStartListening = useCallback(() => {
+    window.speechSynthesis.cancel();
+    startListening();
+  }, [startListening]);
 
-  const renderCaptureCard = () => (
-    <div className="card-surface h-80 overflow-hidden p-6">
-      <div className="flex h-full flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Live capture</h3>
-          <span className="text-xs text-slate-500">Camera active</span>
-        </div>
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/60">
-          <div className="text-center text-sm text-slate-500">
-            {user?.isDeaf
-              ? 'Webcam feed simulated here. Position yourself so gestures are clearly visible.'
-              : 'Microphone capture running. Speak clearly towards your device.'}
+  // Determine call status display
+  const callStatus = useMemo(() => {
+    switch (callState) {
+      case 'calling':
+        return 'Calling...';
+      case 'incoming':
+        return 'Incoming call';
+      case 'connected':
+        return 'Live call in progress';
+      case 'ending':
+        return 'Ending call...';
+      default:
+        return 'Not in call';
+    }
+  }, [callState]);
+
+  const callHeader = useMemo(() => {
+    if (!user?.isDeaf) {
+      return 'Listening via microphone';
+    }
+    return 'Capturing sign language via camera';
+  }, [user?.isDeaf]);
+
+  const renderCaptureCard = () => {
+    if (!user?.isDeaf) return null;
+    
+    return (
+      <div className="card-surface overflow-hidden">
+        <div className="flex items-center justify-between p-4">
+          <h3 className="text-lg font-semibold text-white">Your Camera</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleCamera}
+              className={`rounded-full p-2 transition ${isCameraEnabled ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}
+              title={isCameraEnabled ? 'Camera on' : 'Camera off'}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isCameraEnabled ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                )}
+              </svg>
+            </button>
           </div>
         </div>
+        <div className="relative aspect-video bg-slate-950">
+          {localStream && isCameraEnabled ? (
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-slate-500">Camera is off</p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderPrimaryPanel = () => {
     if (user?.isDeaf) {
@@ -221,16 +306,21 @@ const CallScreen = () => {
             )}
           </div>
           
-          {/* Small area showing the other communicator's speech */}
+          {/* Show received transcripts from the other user */}
           <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-medium text-slate-400">From {contact?.username || 'other communicator'}</p>
             </div>
-            <div className="min-h-[3rem] max-h-24 overflow-y-auto">
-              {transcript ? (
-                <p className="text-xs text-slate-300">{transcript}</p>
-              ) : transcriptHistory.length > 0 ? (
-                <p className="text-xs text-slate-300">{transcriptHistory[0].text}</p>
+            <div className="min-h-[3rem] max-h-32 overflow-y-auto">
+              {transcriptMessages.length > 0 ? (
+                <div className="space-y-2">
+                  {transcriptMessages.slice(-3).map((msg, idx) => (
+                    <div key={idx} className="text-sm text-slate-200 border-b border-slate-700 pb-2 last:border-0">
+                      <p>{msg.text}</p>
+                      <p className="text-xs text-slate-500">{formatTimestamp(msg.timestamp)}</p>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <p className="text-xs text-slate-500 italic">No speech detected yet...</p>
               )}
@@ -261,19 +351,34 @@ const CallScreen = () => {
     return (
       <div className="card-surface space-y-4 p-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Live transcript</h3>
-          <span className="text-xs text-slate-500">Shared in real time</span>
+          <h3 className="text-lg font-semibold text-white">Your Speech</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMic}
+              className={`rounded-full p-2 transition ${isMicEnabled ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}
+              title={isMicEnabled ? 'Mic on' : 'Mic off'}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {isMicEnabled ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                )}
+              </svg>
+            </button>
+            <span className="text-xs text-slate-500">{isMicEnabled ? 'Mic on' : 'Mic muted'}</span>
+          </div>
         </div>
         {transcript && (
           <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-200">
             <p className="text-xs uppercase tracking-wide text-amber-400">Speaking now</p>
             <p className="mt-1">{transcript}</p>
-            {isTyping && <p className="text-xs text-slate-500">Playing audio...</p>}
+            {isTyping && <p className="text-xs text-slate-500">Processing...</p>}
           </div>
         )}
         <div
           ref={transcriptRef}
-          className="h-52 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300 whitespace-pre-line"
+          className="h-40 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300 whitespace-pre-line"
         >
           {transcriptHistory && transcriptHistory.length > 0 ? (
             transcriptHistory.map((entry) => (
@@ -283,13 +388,14 @@ const CallScreen = () => {
               </div>
             ))
           ) : (
-            <p className="text-slate-400 italic">Listening to the sign language communicator....</p>
+            <p className="text-slate-400 italic">Your speech will appear here...</p>
           )}
         </div>
         <div className="flex gap-3">
           <button
             onClick={handleStartListening}
-            className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+            disabled={!isMicEnabled}
+            className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-slate-700"
           >
             Resume listening
           </button>
@@ -299,6 +405,27 @@ const CallScreen = () => {
           >
             Clear
           </button>
+        </div>
+
+        {/* Show received translations from sign language user */}
+        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-slate-400">From {contact?.username || 'sign language user'}</p>
+          </div>
+          <div className="min-h-[3rem] max-h-32 overflow-y-auto">
+            {translationMessages.length > 0 ? (
+              <div className="space-y-2">
+                {translationMessages.slice(-3).map((msg, idx) => (
+                  <div key={idx} className="text-sm text-slate-200 border-b border-slate-700 pb-2 last:border-0">
+                    <p>{msg.text}</p>
+                    <p className="text-xs text-slate-500">{formatTimestamp(msg.timestamp)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 italic">Waiting for sign language translation...</p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -355,10 +482,24 @@ const CallScreen = () => {
     </div>
   );
 
+  // Calculate call duration
+  const callDuration = useMemo(() => {
+    if (!currentCall?.startTime) return null;
+    const duration = Math.floor((Date.now() - currentCall.startTime) / 1000);
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }, [currentCall]);
+
   const renderInsightsCard = () => (
     <div className="card-surface space-y-4 p-6">
       <h3 className="text-lg font-semibold text-white">Call insights</h3>
       <ul className="space-y-3 text-sm text-slate-400">
+        {callDuration && (
+          <li className="rounded-2xl bg-slate-950/60 p-4">
+            <span className="font-semibold text-slate-200">Call duration:</span> {callDuration}
+          </li>
+        )}
         <li className="rounded-2xl bg-slate-950/60 p-4">
           <span className="font-semibold text-slate-200">Voice status:</span> {isSpeaking ? 'Audio playing' : 'Idle'}
         </li>
@@ -388,7 +529,7 @@ const CallScreen = () => {
             <h2 className="text-3xl font-semibold text-white">{callHeader}</h2>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-400">
-            <span className="rounded-full bg-brand-600/20 px-4 py-2 text-brand-200">{activeStatus}</span>
+            <span className="rounded-full bg-brand-600/20 px-4 py-2 text-brand-200">{callStatus}</span>
             {user?.isDeaf ? (
               <span className="rounded-full bg-slate-800 px-4 py-2 text-slate-300">Sign language mode</span>
             ) : (
@@ -400,8 +541,8 @@ const CallScreen = () => {
           <span className="rounded-full bg-slate-900 px-3 py-1 text-slate-300">You: {user?.username ?? 'Unknown'}</span>
           {contact && <span className="rounded-full bg-slate-900 px-3 py-1 text-slate-300">Connected with @{contact.username}</span>}
           <button
-            onClick={endCall}
-            disabled={!isCallActive}
+            onClick={handleEndCall}
+            disabled={callState === 'idle'}
             className="rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-slate-700"
           >
             End call

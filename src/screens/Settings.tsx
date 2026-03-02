@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import VoiceSettings from '../components/VoiceSettings';
 

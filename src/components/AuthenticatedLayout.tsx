@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import IncomingCallModal from './IncomingCallModal';
 
 const navItems = [
   { label: 'Contacts', to: '/contacts', description: 'Manage your contact list' },
@@ -9,7 +10,7 @@ const navItems = [
 ];
 
 const AuthenticatedLayout = () => {
-  const { user, logout } = useAppContext();
+  const { user, logout, incomingCall, acceptCall, rejectCall } = useAppContext();
   const location = useLocation();
 
   if (!user) {
@@ -96,6 +97,13 @@ const AuthenticatedLayout = () => {
           </div>
         </main>
       </div>
+
+      {/* Incoming Call Modal */}
+      <IncomingCallModal
+        incomingCall={incomingCall}
+        onAccept={acceptCall}
+        onReject={rejectCall}
+      />
     </div>
   );
 };

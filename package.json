@@ -10,14 +10,16 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "server": "node signaling-server.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
-    "react-router-dom": "^6.22.0"
+    "react-router-dom": "^6.22.0",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "@eslint/js": "^8.56.0",

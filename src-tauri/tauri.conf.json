@@ -9,6 +9,9 @@
       "category": "DeveloperTool",
       "targets": "all",
       "identifier": "com.signlanguage.communicator",
+      "icon": [
+        "icons/icon.ico"
+      ],
       "windows": {
         "webviewInstallMode": {
           "type": "downloadBootstrapper",

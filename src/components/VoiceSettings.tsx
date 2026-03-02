@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FaVolumeUp, FaLanguage } from 'react-icons/fa';
 import { speak as speakTTS } from '../services/localTTS';
-import type { VoiceSettings } from '../services/localTTS';
+
+// Volume icon SVG component
+const VolumeIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+  </svg>
+);
 
 type VoiceSettingsProps = {
   onVoiceChange: (voice: SpeechSynthesisVoice) => void;
@@ -110,7 +115,7 @@ const VoiceSettings = ({
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-white">
-          <FaVolumeUp className="inline mr-2" />
+          <VolumeIcon className="inline w-5 h-5 mr-2" />
           Voice Settings
         </h3>
         <p className="text-sm text-slate-400">Customize text-to-speech voice and settings</p>
@@ -120,7 +125,7 @@ const VoiceSettings = ({
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1">Voice</label>
           <div className="relative">
-            <FaVolumeUp className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <VolumeIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <select
               value={selectedVoice}
               onChange={handleVoiceChange}

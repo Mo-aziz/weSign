@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 
 const Contacts = () => {
-  const { contacts, addContact, removeContact, user } = useAppContext();
+  const { contacts, addContact, removeContact, user, initiateCall, callState } = useAppContext();
   const navigate = useNavigate();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -21,6 +21,23 @@ const Contacts = () => {
       setContactName('');
     } else {
       setFeedback(result.message ?? 'Unable to add contact.');
+    }
+  };
+
+  const handleCallContact = async (contact: { id: string; username: string }) => {
+    if (callState !== 'idle') {
+      setFeedback('You are already in a call. Please end the current call first.');
+      return;
+    }
+    
+    try {
+      // For demo purposes, we assume the contact is the opposite type
+      const isContactDeaf = !user?.isDeaf;
+      await initiateCall(contact.id, contact.username, isContactDeaf);
+      navigate('/call', { state: { contact } });
+    } catch (error) {
+      setFeedback('Failed to initiate call. Please try again.');
+      console.error('Call initiation error:', error);
     }
   };
 
@@ -67,10 +84,11 @@ const Contacts = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => navigate('/call', { state: { contact } })}
-                    className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500"
+                    onClick={() => handleCallContact(contact)}
+                    disabled={callState !== 'idle'}
+                    className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-slate-700"
                   >
-                    Call contact
+                    {callState !== 'idle' ? 'In Call...' : 'Call contact'}
                   </button>
                   <button
                     onClick={() => removeContact(contact.id)}
