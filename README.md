@@ -1,10 +1,10 @@
-# 🤝 Sign Language Communicator
+# Sign Language Communicator
 
 A modern desktop application that enables seamless communication between deaf and hearing individuals using video calls, real-time translation, and intelligent sign/speech recognition.
 
 ---
 
-## 📋 Table of Contents
+##  Table of Contents
 
 1. [Project Overview](#project-overview)
 2. [Key Features](#key-features)
@@ -20,7 +20,7 @@ A modern desktop application that enables seamless communication between deaf an
 
 ---
 
-## 📖 Project Overview
+## Project Overview
 
 **Sign Language Communicator** is a Windows desktop application built with modern web technologies and packaged as a native app. It facilitates real-time video conversations between:
 
@@ -38,36 +38,36 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 ### Authentication & Profiles
-- ✅ User login with profile creation
-- ✅ Customizable user preferences (deaf/hearing designation)
-- ✅ Voice settings (choice of voice, pitch, rate) for text-to-speech
+-  User login with profile creation
+-  Customizable user preferences (deaf/hearing designation)
+-  Voice settings (choice of voice, pitch, rate) for text-to-speech
 
 ### Call Management
-- ✅ Real-time peer-to-peer video calls via WebRTC
-- ✅ Contact list with call history
-- ✅ Incoming call notifications and acceptance/rejection
-- ✅ Call timer showing elapsed time
-- ✅ Bidirectional media streams (camera for deaf, microphone for hearing)
+- Real-time peer-to-peer video calls via WebRTC
+- Contact list with call history
+- Incoming call notifications and acceptance/rejection
+- Call timer showing elapsed time
+- Bidirectional media streams (camera for deaf, microphone for hearing)
 
 ### Translation & Recognition
-- ✅ **Live Sign Recognition**: Detects signs and shows predictions
-- ✅ **Editable Predictions**: Double-click to correct misrecognized signs
-- ✅ **Speech-to-Text**: Converts hearing user's speech to captions
-- ✅ **Text-to-Speech**: Reads translations aloud with customizable voice
-- ✅ **Translation History**: Stores and displays all messages from both users
+- **Live Sign Recognition**: Detects signs and shows predictions
+- **Editable Predictions**: Double-click to correct misrecognized signs
+- **Speech-to-Text**: Converts hearing user's speech to captions
+- **Text-to-Speech**: Reads translations aloud with customizable voice
+- **Translation History**: Stores and displays all messages from both users
 
 ### User Interface
-- ✅ Dark/Light theme toggle with system preference detection
-- ✅ Responsive design (works in browser and desktop)
-- ✅ Real-time status indicators
-- ✅ Smooth animations and transitions
+- Dark/Light theme toggle with system preference detection
+- Responsive design (works in browser and desktop)
+- Real-time status indicators
+- Smooth animations and transitions
 
 ---
 
-## 🛠 Technology Stack
+## Technology Stack
 
 ### Frontend
 | Technology | Purpose | Version |
@@ -100,7 +100,7 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 sign-language-react-v2/
@@ -144,7 +144,7 @@ sign-language-react-v2/
 
 ---
 
-## 📦 Prerequisites
+## Prerequisites
 
 Before you begin, ensure you have installed:
 
@@ -173,7 +173,7 @@ cargo --version     # Should be installed
 
 ---
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Step 1: Clone the Repository
 ```bash
@@ -195,7 +195,7 @@ Should complete without errors. If you see errors, check TypeScript types and im
 
 ---
 
-## ▶️ Running the Application
+## Running the Application
 
 ### Option 1: Desktop App (Recommended)
 Runs the full Tauri desktop application with both frontend (Vite) and native window:
@@ -243,7 +243,7 @@ Signaling server running on port 3001
 
 ---
 
-## 🧪 Testing the Application
+## Testing the Application
 
 ### Test Scenario 1: Single User - Sign Language Recognition
 
@@ -258,10 +258,10 @@ Signaling server running on port 3001
 8. History shows all predictions
 
 **Expected Results:**
-- ✅ Webcam shows live video
-- ✅ Signs appear in recognition box every 2-3 seconds
-- ✅ History panel updates with new entries
-- ✅ Dark/light theme works properly
+- Webcam shows live video
+- Signs appear in recognition box every 2-3 seconds
+- History panel updates with new entries
+- Dark/light theme works properly
 
 ### Test Scenario 2: Calling Another User (Requires 2 Instances)
 
@@ -291,11 +291,11 @@ Signaling server running on port 3001
 7. User A signs, gets recognized and sent to User B
 
 **Expected Results:**
-- ✅ Bidirectional video/audio streams
-- ✅ Call timer increments
-- ✅ Translations exchange in real-time
-- ✅ Both users can end call independently
-- ✅ No errors in browser console
+- Bidirectional video/audio streams
+- Call timer increments
+- Translations exchange in real-time
+- Both users can end call independently
+- No errors in browser console
 
 ### Test Scenario 3: UI & Navigation
 
@@ -322,10 +322,10 @@ Signaling server running on port 3001
 5. List updates
 
 **Expected Results:**
-- ✅ All buttons respond immediately
-- ✅ Input fields validate properly
-- ✅ No console errors
-- ✅ Smooth transitions between screens
+- All buttons respond immediately
+- Input fields validate properly
+- No console errors
+- Smooth transitions between screens
 
 ### Test Scenario 4: Error Handling
 
@@ -349,7 +349,7 @@ Signaling server running on port 3001
 
 ---
 
-## 🏗️ Building for Production
+## Building for Production
 
 ### Build Desktop App (Windows EXE)
 ```bash
@@ -380,7 +380,7 @@ dist/                          # Static files ready for deployment
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Issue 1: "Command 'tauri' not found"
 **Solution:** Ensure Tauri CLI is installed:
@@ -443,7 +443,7 @@ npm install                    # Reinstall dependencies
 
 ---
 
-## 📡 API Reference
+## API Reference
 
 ### Global State (AppContext)
 
@@ -526,7 +526,7 @@ interface AppContextType {
 
 ---
 
-## 📞 Support & Contact
+## Support & Contact
 
 - **Bug Reports**: Create an issue on [GitHub Issues](https://github.com/Mo-aziz/weSign/issues)
 - **Feature Requests**: Discuss in [GitHub Discussions](https://github.com/Mo-aziz/weSign/discussions)
@@ -534,13 +534,13 @@ interface AppContextType {
 
 ---
 
-## 📄 License
+## License
 
 This project is part of the weSign initiative for accessible communication. See LICENSE file for details.
 
 ---
 
-## 🎉 Quick Start Cheat Sheet
+##  Quick Start Cheat Sheet
 
 ```bash
 # First time setup
@@ -564,5 +564,4 @@ npm run build                              # Build frontend only
 
 ---
 
-**Last Updated:** April 8, 2026  
 **Version:** 0.1.0
