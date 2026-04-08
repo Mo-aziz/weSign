@@ -529,7 +529,6 @@ interface AppContextType {
 ## Support & Contact
 
 - **Bug Reports**: Create an issue on [GitHub Issues](https://github.com/Mo-aziz/weSign/issues)
-- **Feature Requests**: Discuss in [GitHub Discussions](https://github.com/Mo-aziz/weSign/discussions)
 - **Documentation**: See [Tauri Docs](https://tauri.app/v1/guides/) and [React Docs](https://react.dev)
 
 ---
