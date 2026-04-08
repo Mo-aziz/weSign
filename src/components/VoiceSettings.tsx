@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { speak as speakTTS } from '../services/localTTS';
 
-// Volume icon SVG component
-const VolumeIcon = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-  </svg>
-);
-
 type VoiceSettingsProps = {
   onVoiceChange: (voice: SpeechSynthesisVoice) => void;
   onRateChange: (rate: number) => void;
@@ -53,43 +46,6 @@ const VoiceSettings = ({
     };
   }, [onVoiceChange, selectedVoice]);
 
-  const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const voiceName = e.target.value;
-    const voice = voices.find(v => v.name === voiceName);
-    if (voice) {
-      setSelectedVoice(voiceName);
-      onVoiceChange(voice);
-    }
-  };
-
-  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newRate = parseFloat(e.target.value);
-    setRate(newRate);
-    onRateChange(newRate);
-  };
-
-  const handlePitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPitch = parseFloat(e.target.value);
-    setPitch(newPitch);
-    onPitchChange(newPitch);
-  };
-
-  const testVoice = async () => {
-    const testText = 'This is a test of the voice settings';
-    const testSettings = {
-      voiceName: selectedVoice,
-      rate: rate,
-      pitch: pitch,
-    } as const;
-    
-    try {
-      await speakTTS(testText, testSettings);
-    } catch (error) {
-      console.error('Error testing voice:', error);
-    }
-  };
-
-  // Filter out duplicate-sounding voices (e.g., keep only one of Hazel/Susan)
   const filteredVoices = useMemo(() => {
     const hasHazel = voices.some(v => v.name.toLowerCase().includes('hazel'));
     const hasSusan = voices.some(v => v.name.toLowerCase().includes('susan'));
@@ -102,86 +58,91 @@ const VoiceSettings = ({
     return voices;
   }, [voices]);
 
-  // Group voices by language
-  const voicesByLang = filteredVoices.reduce<Record<string, SpeechSynthesisVoice[]>>((acc, voice) => {
-    if (!acc[voice.lang]) {
-      acc[voice.lang] = [];
-    }
-    acc[voice.lang].push(voice);
-    return acc;
-  }, {});
+  const VolumeIcon = () => (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+    </svg>
+  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-white">
-          <VolumeIcon className="inline w-5 h-5 mr-2" />
-          Voice Settings
-        </h3>
-        <p className="text-sm text-slate-400">Customize text-to-speech voice and settings</p>
+      {/* Voice Selection Card */}
+      <div className="card-surface space-y-4 p-6">
+        <div className="flex items-center justify-between">
+          <label className="text-lg font-semibold text-white">Output Voice</label>
+          <VolumeIcon />
+        </div>
+        <div className="relative">
+          <select
+            value={selectedVoice}
+            onChange={(e) => {
+              const voice = voices.find(v => v.name === e.target.value);
+              if (voice) {
+                setSelectedVoice(voice.name);
+                onVoiceChange(voice);
+              }
+            }}
+            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            {filteredVoices.map((voice) => (
+              <option key={voice.name} value={voice.name}>
+                {voice.name} ({voice.lang})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Voice</label>
-          <div className="relative">
-            <VolumeIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <select
-              value={selectedVoice}
-              onChange={handleVoiceChange}
-              className="input-field pl-10 w-full"
-            >
-              {Object.entries(voicesByLang).map(([lang, langVoices]) => (
-                <optgroup key={lang} label={new Intl.DisplayNames(['en'], { type: 'language' }).of(lang) || lang}>
-                  {langVoices.map(voice => (
-                    <option key={voice.name} value={voice.name}>
-                      {voice.name} {voice.default && '• Default'}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+      {/* Sliders */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Rate Slider */}
+        <div className="card-surface space-y-4 p-6">
+          <div className="flex justify-between items-center">
+            <label className="text-lg font-semibold text-white">Speaking Rate</label>
+            <span className="text-sm font-bold text-brand-300 px-2 py-1 bg-brand-500/20 rounded-lg">{rate}x</span>
+          </div>
+          <input 
+            type="range" 
+            min="0.5" 
+            max="2" 
+            step="0.1" 
+            value={rate}
+            onChange={(e) => {
+              const newRate = parseFloat(e.target.value);
+              setRate(newRate);
+              onRateChange(newRate);
+            }}
+            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-500"
+          />
+          <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-tighter">
+            <span>Slower</span>
+            <span>Normal</span>
+            <span>Faster</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Speed: {rate.toFixed(1)}x
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={rate}
-              onChange={handleRateChange}
-              className="w-full"
-            />
+        {/* Pitch Slider */}
+        <div className="card-surface space-y-4 p-6">
+          <div className="flex justify-between items-center">
+            <label className="text-lg font-semibold text-white">Voice Pitch</label>
+            <span className="text-sm font-bold text-slate-300 px-2 py-1 bg-slate-600 rounded-lg">Default</span>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Pitch: {pitch.toFixed(1)}x
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={pitch}
-              onChange={handlePitchChange}
-              className="w-full"
-            />
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            value={pitch * 50}
+            onChange={(e) => {
+              const newPitch = parseFloat(e.target.value) / 50;
+              setPitch(newPitch);
+              onPitchChange(newPitch);
+            }}
+            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-500"
+          />
+          <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-tighter">
+            <span>Deep</span>
+            <span>High</span>
           </div>
-        </div>
-
-        <div className="pt-2">
-          <button
-            onClick={testVoice}
-            className="text-sm text-brand-400 hover:text-brand-300 transition-colors"
-          >
-            Test Voice
-          </button>
         </div>
       </div>
     </div>

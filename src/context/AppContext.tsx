@@ -65,9 +65,9 @@ const getInitialDarkMode = () => {
 };
 
 const defaultContacts: Contact[] = [
-  { id: 'mentor-7p39f1', username: 'mentor' },
-  { id: 'interpreter-h42km0', username: 'interpreter_bot' },
-  { id: 'friend-lm229v', username: 'friend_amelia' },
+  { id: 'mentor-7p39f1', username: 'Mentor' },
+  { id: 'interpreter-h42km0', username: 'Interpreter' },
+  { id: 'friend-lm229v', username: 'Amelia' },
 ];
 
 const generateUserId = (username: string) => {
@@ -86,7 +86,11 @@ const generateUserId = (username: string) => {
 
 export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>(defaultContacts);
+  // Force reset contacts to defaults by clearing any cached state
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    // Clear any potential cached contacts
+    return defaultContacts;
+  });
   const [darkMode, setDarkMode] = useState<boolean>(getInitialDarkMode);
 
   // Initialize call service

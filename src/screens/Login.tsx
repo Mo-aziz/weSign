@@ -49,7 +49,8 @@ const Login = () => {
               className="input-field"
               placeholder="your.userid"
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              onChange={(e) => setUsername(e.target.value)}
+              required
             />
           </div>
 
@@ -61,44 +62,60 @@ const Login = () => {
               id="password"
               type="password"
               className="input-field"
-              placeholder="••••••••"
+              placeholder="Enter your password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
+              required
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">I primarily communicate using sign language</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Toggle this off if you prefer spoken communication.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsDeaf((prev) => !prev)}
-              className={`relative h-8 w-14 rounded-full transition-colors duration-300 ${
-                isDeaf ? 'bg-brand-600' : 'bg-slate-700'
-              }`}
-            >
-              <span
-                className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white transition-transform duration-300 ${
-                  isDeaf ? 'translate-x-6' : 'translate-x-0'
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-600 dark:text-slate-300">User Type</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setIsDeaf(true)}
+                className={`rounded-lg border-2 px-4 py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                  isDeaf
+                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
+                    : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
                 }`}
-              />
-            </button>
+              >
+                <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+                <span className="text-sm font-medium">Deaf / Hard of Hearing</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDeaf(false)}
+                className={`rounded-lg border-2 px-4 py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                  !isDeaf
+                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
+                    : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                }`}
+              >
+                <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                <span className="text-sm font-medium">Hearing</span>
+              </button>
+            </div>
           </div>
 
-          {error && <p className="text-sm text-rose-400">{error}</p>}
+          {error && (
+            <div className="rounded-lg bg-red-500/20 p-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
 
           <button
             type="submit"
-            className="w-full rounded-2xl bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-500"
+            className="w-full rounded-xl bg-brand-600 px-4 py-3 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors"
           >
-            Enter platform
+            Sign In
           </button>
         </form>
-        <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-          By continuing you agree to our respectful communication guidelines.
-        </p>
       </div>
     </div>
   );

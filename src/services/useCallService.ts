@@ -72,9 +72,8 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-// For local testing: ws://localhost:3001
-// For production: Replace with your server IP address (e.g., ws://192.168.1.100:3001)
-const WS_URL = 'ws://192.168.56.1:3001';
+// Use localhost by default so it works in browser and embedded runtimes.
+const WS_URL = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:3001';
 
 let ws: WebSocket | null = null;
 let messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();
@@ -123,7 +122,22 @@ const sendSignalingMessage = (_toUserId: string, message: SignalingMessage) => {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message));
   } else {
-    console.warn('WebSocket not connected, message not sent');
+    const errorMsg = ws?.readyState === WebSocket.CONNECTING 
+      ? 'WebSocket is connecting, try again in a moment' 
+      : 'WebSocket not connected';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+};
+
+// Wait for WebSocket to be ready with timeout
+const waitForWebSocketReady = async (timeoutMs: number = 5000): Promise<void> => {
+  const startTime = Date.now();
+  while (ws?.readyState !== WebSocket.OPEN) {
+    if (Date.now() - startTime > timeoutMs) {
+      throw new Error('WebSocket connection timeout - signaling server may be unavailable');
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 };
 
@@ -156,9 +170,33 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const pendingDataMessagesRef = useRef<string[]>([]);
+  const localStreamRef = useRef<MediaStream | null>(null); // Keep ref in sync with state
+  const currentCallRef = useRef<CallData | null>(null); // Keep ref in sync with state
 
-  // Initialize peer connection
-  const createPeerConnection = useCallback(() => {
+  // Keep refs in sync with state
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    currentCallRef.current = currentCall;
+  }, [currentCall]);
+
+  const flushPendingDataMessages = useCallback(() => {
+    const channel = dataChannelRef.current;
+    if (!channel || channel.readyState !== 'open' || pendingDataMessagesRef.current.length === 0) {
+      return;
+    }
+
+    pendingDataMessagesRef.current.forEach((payload) => {
+      channel.send(payload);
+    });
+    pendingDataMessagesRef.current = [];
+  }, []);
+
+  // Initialize peer connection WITH TRACKS ALREADY ADDED
+  const createPeerConnection = useCallback((stream: MediaStream) => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -166,19 +204,29 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       ]
     });
 
+    // Add local tracks IMMEDIATELY to make offer ready
+    console.log('Adding local tracks:', { video: stream.getVideoTracks().length, audio: stream.getAudioTracks().length });
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
+    });
+
     pc.ontrack = (event) => {
+      console.log('✓ Received remote track:', event.track.kind);
       setRemoteStream(event.streams[0]);
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && currentCall) {
-        const otherUserId = currentCall.caller.id === currentUserId 
-          ? currentCall.callee.id 
-          : currentCall.caller.id;
+      // Use ref to get current call (not stale closure value)
+      if (event.candidate && currentCallRef.current) {
+        const call = currentCallRef.current;
+        const otherUserId = call.caller.id === currentUserId 
+          ? call.callee.id 
+          : call.caller.id;
           
+        console.log('Sending ICE candidate to:', otherUserId);
         sendSignalingMessage(otherUserId, {
           type: 'ice-candidate',
-          callId: currentCall.id,
+          callId: call.id,
           from: currentUserId,
           to: otherUserId,
           payload: event.candidate.toJSON()
@@ -193,6 +241,7 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     
     dataChannel.onopen = () => {
       console.log('Data channel opened');
+      flushPendingDataMessages();
     };
     
     dataChannel.onmessage = (event) => {
@@ -208,6 +257,11 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
 
     pc.ondatachannel = (event) => {
       const receiveChannel = event.channel;
+      dataChannelRef.current = receiveChannel;
+      receiveChannel.onopen = () => {
+        console.log('Receive data channel opened');
+        flushPendingDataMessages();
+      };
       receiveChannel.onmessage = (msgEvent) => {
         const data = JSON.parse(msgEvent.data);
         if (data.type === 'sign-translation') {
@@ -219,27 +273,82 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     };
 
     return pc;
-  }, [currentCall, currentUserId]);
+  }, [currentUserId]);
 
   // Get media stream
   const getMediaStream = useCallback(async (isDeaf: boolean) => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('MediaDevices API is not available in this environment');
+      }
+
       if (isDeaf) {
-        // Sign language user needs camera
-        return await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: false
-        });
-      } else {
-        // Normal user needs microphone
-        return await navigator.mediaDevices.getUserMedia({
+        // For deaf users: request camera first with basic constraints (most reliable)
+        try {
+          console.log('Requesting camera (DEAF user)...');
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+          console.log('Camera obtained successfully:', stream);
+          return stream;
+        } catch (error) {
+          console.error('Camera request failed:', error);
+          throw error;
+        }
+      }
+
+      // Hearing user: microphone - try basic audio first (most compatible), then try with enhancements
+      try {
+        console.log('Requesting microphone (HEARING user) - basic audio...');
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: false,
           audio: true
         });
+        console.log('Microphone obtained successfully with basic audio:', stream);
+        return stream;
+      } catch (basicError) {
+        console.warn('Basic audio failed, trying with enhancements:', basicError);
+        try {
+          console.log('Requesting microphone with audio enhancements...');
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: {
+              echoCancellation: { ideal: true },
+              noiseSuppression: { ideal: true },
+              autoGainControl: { ideal: true }
+            }
+          });
+          console.log('Microphone obtained with enhancements:', stream);
+          return stream;
+        } catch (enhancedError) {
+          console.error('Enhanced audio also failed:', enhancedError);
+          throw basicError; // Throw the original error
+        }
       }
     } catch (error) {
-      console.error('Error accessing media devices:', error);
-      throw error;
+      const err = error as DOMException & Error;
+      const errorName = err?.name || '';
+      const errorMessage = err?.message || String(error);
+      
+      console.error('Error accessing media devices:', {
+        name: errorName,
+        message: errorMessage,
+        fullError: error
+      });
+      
+      // Enhance error message with specific handling
+      if (errorName === 'NotAllowedError' || errorName === 'PermissionDeniedError' || errorMessage.includes('permission') || errorMessage.includes('denied')) {
+        throw new Error('MediaPermissionDenied: Permission denied - please check browser settings and allow camera/microphone access');
+      } else if (errorName === 'NotFoundError' || errorMessage.includes('no media')) {
+        throw new Error('NoMediaDeviceFound: No camera or microphone found attached to your computer');
+      } else if (errorName === 'NotReadableError' || errorMessage.includes('being used')) {
+        throw new Error('MediaDeviceInUse: Camera or microphone is being used by another application - please close it and retry');
+      } else if (errorName === 'SecurityError') {
+        throw new Error('SecurityError: Cannot access media - this may require HTTPS. If developing locally, try using http://localhost or 127.0.0.1');
+      }
+      
+      throw new Error(`getUserMedia error: ${errorName} - ${errorMessage}`);
     }
   }, []);
 
@@ -265,29 +374,28 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         }
 
         case 'call-accept': {
-          setCallState('connected');
-          setCurrentCall(prev => prev ? { ...prev, state: 'connected', startTime: Date.now() } : null);
-          
-          // Create offer as the caller
-          const pc = createPeerConnection();
-          peerConnectionRef.current = pc;
-          
-          if (localStream) {
-            localStream.getTracks().forEach(track => {
-              pc.addTrack(track, localStream);
-            });
+          console.log('Received call-accept');
+          // Peer connection should already be created with tracks by initiateCall
+          if (!peerConnectionRef.current) {
+            console.warn('No peer connection on call-accept');
+            break;
           }
           
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          
-          sendSignalingMessage(message.from, {
-            type: 'offer',
-            callId: message.callId,
-            from: currentUserId,
-            to: message.from,
-            payload: offer
-          });
+          try {
+            console.log('Creating offer');
+            const offer = await peerConnectionRef.current.createOffer();
+            await peerConnectionRef.current.setLocalDescription(offer);
+            console.log('Sending offer');
+            sendSignalingMessage(message.from, {
+              type: 'offer',
+              callId: message.callId,
+              from: currentUserId,
+              to: message.from,
+              payload: offer
+            });
+          } catch (error) {
+            console.error('Failed to create offer:', error);
+          }
           break;
         }
 
@@ -307,26 +415,29 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         }
 
         case 'offer': {
-          const pc = createPeerConnection();
-          peerConnectionRef.current = pc;
-          
-          if (localStream) {
-            localStream.getTracks().forEach(track => {
-              pc.addTrack(track, localStream);
-            });
+          console.log('Received offer');
+          // Peer connection should already be created with tracks by acceptCall
+          if (!peerConnectionRef.current) {
+            console.warn('No peer connection when receiving offer');
+            break;
           }
           
-          await pc.setRemoteDescription(new RTCSessionDescription(message.payload as RTCSessionDescriptionInit));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          
-          sendSignalingMessage(message.from, {
-            type: 'answer',
-            callId: message.callId,
-            from: currentUserId,
-            to: message.from,
-            payload: answer
-          });
+          try {
+            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(message.payload as RTCSessionDescriptionInit));
+            console.log('Creating answer');
+            const answer = await peerConnectionRef.current.createAnswer();
+            await peerConnectionRef.current.setLocalDescription(answer);
+            console.log('Sending answer');
+            sendSignalingMessage(message.from, {
+              type: 'answer',
+              callId: message.callId,
+              from: currentUserId,
+              to: message.from,
+              payload: answer
+            });
+          } catch (error) {
+            console.error('Failed to create answer:', error);
+          }
           break;
         }
 
@@ -345,6 +456,20 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
           }
           break;
         }
+
+        case 'sign-translation': {
+          if (message.payload) {
+            setTranslationMessages(prev => [...prev, message.payload as TranslationMessage]);
+          }
+          break;
+        }
+
+        case 'speech-transcript': {
+          if (message.payload) {
+            setTranscriptMessages(prev => [...prev, message.payload as TranslationMessage]);
+          }
+          break;
+        }
       }
     };
 
@@ -355,11 +480,10 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         unsubscribeRef.current();
       }
     };
-  }, [currentUserId, currentUsername, isCurrentUserDeaf, createPeerConnection, localStream]);
+  }, [currentUserId, currentUsername, isCurrentUserDeaf]);
 
   const initiateCall = useCallback(async (contactId: string, contactUsername: string, isContactDeaf: boolean) => {
     const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
     const newCall: CallData = {
       id: callId,
       caller: { id: currentUserId, username: currentUsername, isDeaf: isCurrentUserDeaf },
@@ -367,42 +491,88 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       state: 'calling'
     };
     
+    console.log('=== INITIATE CALL ===', { caller: newCall.caller.username, isDeaf: isCurrentUserDeaf });
     setCurrentCall(newCall);
     setCallState('calling');
-    
-    // Get appropriate media stream
-    const stream = await getMediaStream(isCurrentUserDeaf);
-    setLocalStream(stream);
-    
-    // Send call invite
-    sendSignalingMessage(contactId, {
-      type: 'call-invite',
-      callId,
-      from: currentUserId,
-      to: contactId,
-      payload: { caller: newCall.caller, callId }
-    });
-  }, [currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream]);
+
+    try {
+      await waitForWebSocketReady();
+      
+      // GET MEDIA AND CREATE PEER CONNECTION WITH TRACKS BEFORE SENDING ANY MESSAGE
+      console.log('Requesting media...');
+      const stream = await getMediaStream(isCurrentUserDeaf);
+      setLocalStream(stream);
+      
+      console.log('Creating peer connection with tracks...');
+      const pc = createPeerConnection(stream);
+      peerConnectionRef.current = pc;
+      
+      // Now mark as connected (peer connection ready with tracks)
+      setCurrentCall(prev => prev ? { ...prev, state: 'connected' } : null);
+      setCallState('connected');
+      
+      // THEN send call invite
+      console.log('Sending call-invite');
+      sendSignalingMessage(contactId, {
+        type: 'call-invite',
+        callId,
+        from: currentUserId,
+        to: contactId,
+        payload: { caller: newCall.caller, callId }
+      });
+    } catch (error) {
+      console.error('Call initiation error:', error);
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      setCallState('idle');
+      setCurrentCall(null);
+      setLocalStream(null);
+      throw error;
+    }
+  }, [currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream, createPeerConnection]);
 
   const acceptCall = useCallback(async () => {
     if (!incomingCall) return;
+
+    console.log('=== ACCEPT CALL ===', { caller: incomingCall.caller.username });
+    const newCall: CallData = {
+      id: incomingCall.id,
+      caller: incomingCall.caller,
+      callee: { id: currentUserId, username: currentUsername, isDeaf: isCurrentUserDeaf },
+      state: 'connected'
+    };
     
-    setCurrentCall(incomingCall);
+    setCurrentCall(newCall);
     setIncomingCall(null);
     setCallState('connected');
-    
-    // Get appropriate media stream
-    const stream = await getMediaStream(isCurrentUserDeaf);
-    setLocalStream(stream);
-    
-    // Notify caller
-    sendSignalingMessage(incomingCall.caller.id, {
-      type: 'call-accept',
-      callId: incomingCall.id,
-      from: currentUserId,
-      to: incomingCall.caller.id
-    });
-  }, [incomingCall, currentUserId, isCurrentUserDeaf, getMediaStream]);
+
+    try {
+      await waitForWebSocketReady();
+      
+      // GET MEDIA AND CREATE PEER CONNECTION WITH TRACKS BEFORE SENDING ACCEPT
+      console.log('Requesting media...');
+      const stream = await getMediaStream(isCurrentUserDeaf);
+      setLocalStream(stream);
+      
+      console.log('Creating peer connection with tracks...');
+      const pc = createPeerConnection(stream);
+      peerConnectionRef.current = pc;
+      
+      // Notify caller
+      console.log('Sending call-accept');
+      sendSignalingMessage(incomingCall.caller.id, {
+        type: 'call-accept',
+        callId: incomingCall.id,
+        from: currentUserId,
+        to: incomingCall.caller.id
+      });
+    } catch (error) {
+      console.error('Accept call failed:', error);
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      setCallState('incoming');
+      setLocalStream(null);
+      setCurrentCall(null);
+    }
+  }, [incomingCall, currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream, createPeerConnection]);
 
   const rejectCall = useCallback(() => {
     if (!incomingCall) return;
@@ -455,40 +625,72 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
   }, [currentCall, currentUserId, endCallInternal]);
 
   const sendTranslation = useCallback((text: string, shouldSpeak: boolean) => {
+    const message: TranslationMessage = {
+      text,
+      timestamp: Date.now(),
+      shouldSpeak
+    };
+    const payload = JSON.stringify({
+      type: 'sign-translation',
+      message
+    });
+
     if (dataChannelRef.current?.readyState === 'open') {
-      const message: TranslationMessage = {
-        text,
-        timestamp: Date.now(),
-        shouldSpeak
-      };
-      
-      dataChannelRef.current.send(JSON.stringify({
-        type: 'sign-translation',
-        message
-      }));
-      
-      // Also add to local state
-      setTranslationMessages(prev => [...prev, message]);
+      dataChannelRef.current.send(payload);
+    } else {
+      pendingDataMessagesRef.current.push(payload);
+
+      if (currentCall) {
+        const otherUserId = currentCall.caller.id === currentUserId
+          ? currentCall.callee.id
+          : currentCall.caller.id;
+        sendSignalingMessage(otherUserId, {
+          type: 'sign-translation',
+          callId: currentCall.id,
+          from: currentUserId,
+          to: otherUserId,
+          payload: message
+        });
+      }
     }
-  }, []);
+
+    // Also add to local state
+    setTranslationMessages(prev => [...prev, message]);
+  }, [currentCall, currentUserId]);
 
   const sendTranscript = useCallback((text: string) => {
+    const message: TranslationMessage = {
+      text,
+      timestamp: Date.now(),
+      shouldSpeak: false
+    };
+    const payload = JSON.stringify({
+      type: 'speech-transcript',
+      message
+    });
+
     if (dataChannelRef.current?.readyState === 'open') {
-      const message: TranslationMessage = {
-        text,
-        timestamp: Date.now(),
-        shouldSpeak: false
-      };
-      
-      dataChannelRef.current.send(JSON.stringify({
-        type: 'speech-transcript',
-        message
-      }));
-      
-      // Also add to local state
-      setTranscriptMessages(prev => [...prev, message]);
+      dataChannelRef.current.send(payload);
+    } else {
+      pendingDataMessagesRef.current.push(payload);
+
+      if (currentCall) {
+        const otherUserId = currentCall.caller.id === currentUserId
+          ? currentCall.callee.id
+          : currentCall.caller.id;
+        sendSignalingMessage(otherUserId, {
+          type: 'speech-transcript',
+          callId: currentCall.id,
+          from: currentUserId,
+          to: otherUserId,
+          payload: message
+        });
+      }
     }
-  }, []);
+
+    // Also add to local state
+    setTranscriptMessages(prev => [...prev, message]);
+  }, [currentCall, currentUserId]);
 
   const toggleCamera = useCallback(() => {
     if (localStream) {

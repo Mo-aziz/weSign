@@ -3,7 +3,6 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
 import Login from './screens/Login'
 import Contacts from './screens/Contacts'
-import CallScreen from './screens/CallScreen'
 import Settings from './screens/Settings'
 import Translation from './screens/Translation'
 
@@ -22,7 +21,6 @@ const App = () => {
           <Route element={<AuthenticatedLayout />}>
             <Route index element={<Navigate to="/contacts" replace />} />
             <Route path="/contacts" element={<Contacts />} />
-            <Route path="/call" element={<CallScreen />} />
             <Route path="/translation" element={<Translation />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

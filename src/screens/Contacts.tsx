@@ -1,10 +1,8 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 
 const Contacts = () => {
-  const { contacts, addContact, removeContact, user, initiateCall, callState } = useAppContext();
-  const navigate = useNavigate();
+  const { contacts, addContact, removeContact, user, initiateCall, callState, darkMode } = useAppContext();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -34,9 +32,25 @@ const Contacts = () => {
       // For demo purposes, we assume the contact is the opposite type
       const isContactDeaf = !user?.isDeaf;
       await initiateCall(contact.id, contact.username, isContactDeaf);
-      navigate('/call', { state: { contact } });
+      setFeedback('Call initiated successfully.');
     } catch (error) {
-      setFeedback('Failed to initiate call. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (errorMessage.includes('WebSocket')) {
+        setFeedback('Connection error: Signaling server unreachable. Make sure to run "npm run server" in a separate terminal.');
+      } else if (errorMessage.includes('MediaPermissionDenied')) {
+        setFeedback('❌ Camera/Microphone access denied.\n\n📋 FIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord using your camera\n4. RETRY: Try calling again');
+      } else if (errorMessage.includes('NoMediaDeviceFound')) {
+        setFeedback('❌ No camera or microphone found. Please connect a camera or microphone and retry.');
+      } else if (errorMessage.includes('MediaDeviceInUse')) {
+        setFeedback('❌ Your camera or microphone is being used by another app. Close it and retry.');
+      } else if (errorMessage.includes('SecurityError')) {
+        setFeedback('❌ Security issue: Try accessing via http://localhost:1420 or contact support.');
+      } else if (errorMessage.includes('MediaDevices') || errorMessage.includes('getUserMedia')) {
+        setFeedback(`❌ Camera/Microphone error: ${errorMessage}`);
+      } else {
+        setFeedback(`Failed to initiate call: ${errorMessage}`);
+      }
       console.error('Call initiation error:', error);
     }
   };
@@ -48,86 +62,83 @@ const Contacts = () => {
           <p className="text-sm uppercase tracking-wide text-slate-400">Contacts</p>
           <h2 className="text-3xl font-semibold text-white">Stay connected with your network</h2>
         </div>
-        <p className="max-w-2xl text-sm text-slate-400">
-          Access interpreters, colleagues, and friends instantly. Select a contact to start a communication session.
+        <p className="text-sm text-slate-400">
+          Add and manage your contacts for seamless communication.
         </p>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-          <span className="rounded-full bg-brand-600/20 px-3 py-1 text-brand-200">
-            Signed in as {user?.username ?? 'guest'}
-          </span>
-          <span className="rounded-full bg-slate-800 px-3 py-1 text-slate-300">
-            Preference: {user?.isDeaf ? 'Sign language' : 'Spoken language'}
-          </span>
-          <button
-            onClick={() => navigate('/call')}
-            className="rounded-2xl bg-brand-600 px-4 py-2 font-semibold text-white transition hover:bg-brand-500"
-          >
-            Start a new call
-          </button>
-        </div>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[2fr,1fr] lg:gap-8">
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white">Saved contacts</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {sortedContacts.length === 0 && (
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400 sm:col-span-2">
-                No contacts yet. Add a username to begin building your network.
-              </div>
-            )}
-            {sortedContacts.map((contact) => (
-              <div key={contact.id} className="card-surface flex flex-col gap-4 p-6">
-                <div>
-                  <p className="text-base font-semibold text-white">@{contact.username}</p>
-                  <p className="text-xs text-slate-500">ID: {contact.id}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleCallContact(contact)}
-                    disabled={callState !== 'idle'}
-                    className="flex-1 rounded-2xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-slate-700"
-                  >
-                    {callState !== 'idle' ? 'In Call...' : 'Call contact'}
-                  </button>
-                  <button
-                    onClick={() => removeContact(contact.id)}
-                    className="rounded-2xl border border-transparent px-4 py-2 text-sm font-semibold text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/10"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <aside className="card-surface space-y-6 p-6">
-          <div>
-            <h3 className="text-lg font-semibold text-white">Add new contact</h3>
-            <p className="text-sm text-slate-400">
-              Enter the username of someone you regularly communicate with.
-            </p>
-          </div>
-          <form className="space-y-3" onSubmit={handleAddContact}>
+      <section className="card-surface space-y-6 p-6">
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-4">Add New Contact</h3>
+          <form className="flex gap-4" onSubmit={handleAddContact}>
             <input
-              className="input-field"
-              placeholder="username.id"
+              type="text"
               value={contactName}
-              onChange={(event) => setContactName(event.target.value)}
+              onChange={(e) => setContactName(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+              placeholder="Enter username"
+              required
             />
             <button
               type="submit"
-              className="w-full rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-500"
+              className="rounded-lg bg-brand-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors"
             >
-              Save contact
+              Add Contact
             </button>
           </form>
-          {feedback && <p className="text-xs text-slate-400">{feedback}</p>}
-          <p className="text-xs text-slate-500">
-            You can connect with interpreters, friends, or colleagues across teams. Contacts sync across your devices.
-          </p>
-        </aside>
+          {feedback && (
+            <div className={`mt-4 rounded-lg p-3 text-sm ${
+              feedback.includes('successfully') ? 'bg-green-500/20' : 'bg-blue-500/20'
+            } ${darkMode ? 'text-white' : 'text-black'}`}>
+              {feedback}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="card-surface space-y-4 p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">
+          Your Contacts ({sortedContacts.length})
+        </h3>
+        {sortedContacts.length === 0 ? (
+          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-8 text-center">
+            <p className="text-slate-400">No contacts yet. Add your first contact to get started!</p>
+          </div>
+        ) : (
+          sortedContacts.map((contact) => (
+            <div
+              key={contact.id}
+              className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/30 p-4 transition-all hover:border-slate-600 hover:bg-slate-800/50"
+            >
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-semibold">
+                  {contact.username.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-medium text-white">{contact.username}</p>
+                  <p className="text-sm text-slate-400">ID: {contact.id}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleCallContact(contact)}
+                  disabled={callState !== 'idle'}
+                  className="rounded-lg bg-brand-600 px-4 py-2 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Call contact"
+                >
+                  Call contact
+                </button>
+                <button
+                  onClick={() => removeContact(contact.id)}
+                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-rose-500 hover:bg-rose-500/10 hover:text-rose-200"
+                  title="Remove contact"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </section>
     </div>
   );

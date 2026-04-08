@@ -1,16 +1,16 @@
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import IncomingCallModal from './IncomingCallModal';
+import CallModal from './CallModal';
 
 const navItems = [
   { label: 'Contacts', to: '/contacts', description: 'Manage your contact list' },
-  { label: 'Call', to: '/call', description: 'Start a communication session' },
   { label: 'Translation', to: '/translation', description: 'Practice AI-assisted translation' },
   { label: 'Settings', to: '/settings', description: 'Personalize your experience' },
 ];
 
 const AuthenticatedLayout = () => {
-  const { user, logout, incomingCall, acceptCall, rejectCall } = useAppContext();
+  const { user, logout, incomingCall, acceptCall, rejectCall, callState, currentCall } = useAppContext();
   const location = useLocation();
 
   if (!user) {
@@ -104,6 +104,11 @@ const AuthenticatedLayout = () => {
         onAccept={acceptCall}
         onReject={rejectCall}
       />
+
+      {/* Call Modal - iPhone style overlay */}
+      {(callState === 'calling' || callState === 'incoming' || callState === 'connected') && currentCall && (
+        <CallModal />
+      )}
     </div>
   );
 };
