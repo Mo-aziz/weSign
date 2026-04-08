@@ -204,10 +204,12 @@ Runs the full Tauri desktop application with both frontend (Vite) and native win
 npm run tauri:dev
 ```
 
+**App URL:** `http://localhost:1420/`
+
 **What happens:**
-1. Vite dev server starts on `http://localhost:1420`
-2. Tauri opens a native Windows window displaying the React app at `http://localhost:1420/`
-3. You can also open `http://localhost:1420/` directly in your browser to view the app
+1. Vite dev server starts internally on `http://localhost:1420/`
+2. Tauri opens a native Windows window automatically displaying the React app
+3. App is accessible in browser at `http://localhost:1420/` (can also open manually)
 4. Hot module replacement (HMR) enabled for instant code updates
 5. Opens DevTools for debugging (F12 in Tauri window)
 
@@ -549,7 +551,7 @@ cd "sign language react V2"
 npm install
 
 # Daily development
-npm run tauri:dev                          # Run desktop app (http://localhost:1420/)
+npm run tauri:dev                          # Run desktop app (opens at http://localhost:1420/)
 
 # In another terminal (for multiplayer)
 npm run server                             # Start signaling server (port 3001)
@@ -561,6 +563,13 @@ npm run tauri:build                        # Creates .exe installer
 npm run lint                               # Check code quality
 npm run build                              # Build frontend only
 ```
+
+---
+
+**App URLs:**
+- Desktop: http://localhost:1420/
+- Browser only: http://localhost:5173/
+- Signaling Server: ws://localhost:3001/
 
 ---
 
