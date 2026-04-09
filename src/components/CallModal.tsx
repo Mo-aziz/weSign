@@ -25,6 +25,17 @@ const CallModal = () => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+
+  // Keep refs in sync with context streams
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream;
+  }, [remoteStream]);
 
   // Initialize speech synthesis
   useEffect(() => {
@@ -82,10 +93,15 @@ const CallModal = () => {
   const [speechEditable, setSpeechEditable] = useState('');
   const [isSpeechEditing, setIsSpeechEditing] = useState(false);
   const [isMicListening, setIsMicListening] = useState(false);
+  const [isMicPausedForTTS, setIsMicPausedForTTS] = useState(false); // NEW: Track if mic is paused during TTS
   const [elapsedTime, setElapsedTime] = useState(0);
   const [previewEditMode, setPreviewEditMode] = useState(false);
   const [previewEditText, setPreviewEditText] = useState('');
   const recognitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processedMessageTimestampsRef = useRef<Set<number>>(new Set()); // Track processed messages to prevent duplicate TTS
+  const pausedMessageTimestampRef = useRef<number | null>(null); // Track which message caused the pause to prevent duplicate resume attempts
+  const isMicPausedRef = useRef<boolean>(false); // Use ref for immediate access in handlers (not state)
+  const micSafetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Safety timeout to force mic open after 3 seconds
 
   const lastFinalTranscriptRef = useRef('');
 
@@ -128,9 +144,16 @@ const CallModal = () => {
     if (isMicListening) {
       stopSpeechRecognition();
       setIsMicListening(false);
+      setIsMicPausedForTTS(false);
+      isMicPausedRef.current = false;
       lastFinalTranscriptRef.current = '';
       if (recognitionTimeoutRef.current) {
         clearTimeout(recognitionTimeoutRef.current);
+      }
+      // Clear safety timeout if present
+      if (micSafetyTimeoutRef.current) {
+        clearTimeout(micSafetyTimeoutRef.current);
+        micSafetyTimeoutRef.current = null;
       }
     } else {
       setIsMicListening(true);
@@ -266,87 +289,555 @@ const CallModal = () => {
         micStartedRef.current = false;
       }
     }
+    
+    // Clear any pending safety timeout and reset pause state
+    if (micSafetyTimeoutRef.current) {
+      clearTimeout(micSafetyTimeoutRef.current);
+      micSafetyTimeoutRef.current = null;
+    }
+    setIsMicPausedForTTS(false);
+    isMicPausedRef.current = false;
+    pausedMessageTimestampRef.current = null;
   }, [callState, user?.isDeaf, handleMicToggle, startRecognition, stopRecognition]);
+
+  // Debug: Log user voiceSettings whenever they change
+  useEffect(() => {
+    console.log('[DEBUG] User voiceSettings changed:', user?.voiceSettings);
+    console.log('[DEBUG] Voice name:', user?.voiceSettings?.voiceName);
+    console.log('[DEBUG] Voice rate:', user?.voiceSettings?.rate);
+    console.log('[DEBUG] Voice pitch:', user?.voiceSettings?.pitch);
+  }, [user?.voiceSettings?.voiceName, user?.voiceSettings?.rate, user?.voiceSettings?.pitch]);
 
   // Remove old useEffect - transcript is now handled in handleMicToggle
 
   const handleConfirmTranslation = useCallback((text: string) => {
+    console.log('[handleConfirmTranslation] Called with text:', text);
+    console.log('[handleConfirmTranslation] Current user object:', user);
+    console.log('[handleConfirmTranslation] user?.voiceSettings:', user?.voiceSettings);
+    
     const entry = signService.confirmTranslation(text);
-    if (entry) {
-      sendTranslation(entry.text, true); // Set shouldSpeak to true so hearing person hears it
+    console.log('[handleConfirmTranslation] Confirmed entry:', entry);
+    console.log('[handleConfirmTranslation] currentCall:', currentCall);
+    
+    if (entry && currentCall) {
+      const remoteUserIsDeaf = currentCall.callee.id === user?.id 
+        ? currentCall.caller.isDeaf 
+        : currentCall.callee.isDeaf;
+
+      console.log('[handleConfirmTranslation] currentCall.caller:', currentCall.caller);
+      console.log('[handleConfirmTranslation] currentCall.callee:', currentCall.callee);
+      console.log('[handleConfirmTranslation] Current user id:', user?.id);
+      console.log('[handleConfirmTranslation] Remote user is deaf:', remoteUserIsDeaf);
       
-      // Speak the entire text at once with better settings to prevent interruption
-      const utterance = new SpeechSynthesisUtterance(entry.text);
+      const shouldSpeakValue = !remoteUserIsDeaf;
+      console.log('[handleConfirmTranslation] *** ABOUT TO SEND MESSAGE ***');
+      console.log('[handleConfirmTranslation] text:', entry.text);
+      console.log('[handleConfirmTranslation] shouldSpeak:', shouldSpeakValue);
+      console.log('[handleConfirmTranslation] voiceSettings:', user?.voiceSettings);
+      console.log('[handleConfirmTranslation] voiceSettings.voiceName:', user?.voiceSettings?.voiceName);
+      sendTranslation(entry.text, shouldSpeakValue, user?.voiceSettings);
+    } else {
+      console.log('[handleConfirmTranslation] SKIPPED - entry:', !!entry, 'currentCall:', !!currentCall);
+    }
+  }, [signService, sendTranslation, user?.isDeaf, user?.id, user?.voiceSettings, currentCall]);
+
+  // Auto-speak only the LATEST remote message if shouldSpeak is true
+  useEffect(() => {
+    if (translationMessages.length === 0) return;
+    
+    const latestMsg: any = translationMessages[translationMessages.length - 1];
+    console.log('[Auto-TTS] Processing latest message:', latestMsg);
+    console.log('[Auto-TTS] shouldSpeak:', latestMsg.shouldSpeak, 'isLocal:', latestMsg.isLocal, 'text:', latestMsg.text);
+    
+    // Check if this message has already been processed to prevent duplicate TTS
+    if (latestMsg.timestamp && processedMessageTimestampsRef.current.has(latestMsg.timestamp)) {
+      console.log('[Auto-TTS] 🔁 Message already processed, skipping:', latestMsg.timestamp);
+      return;
+    }
+    
+    if (latestMsg.shouldSpeak && !latestMsg.isLocal && latestMsg.text) {
+      // Mark this message as processed
+      if (latestMsg.timestamp) {
+        processedMessageTimestampsRef.current.add(latestMsg.timestamp);
+      }
+      console.log('[Auto-TTS] ✓ SPEAKING message:', latestMsg.text);
+      console.log('[Auto-TTS] Sender voice settings:', latestMsg.voiceSettings);
       
-      // Configure utterance for better completion
-      utterance.rate = user?.voiceSettings?.rate ?? 1.0;
-      utterance.pitch = user?.voiceSettings?.pitch ?? 1.0;
-      utterance.volume = 1.0;
-      
-      // Set voice if available - wait for voices to be loaded
-      const setVoiceAndSpeak = () => {
-        const voices = window.speechSynthesis.getVoices();
-        console.log('Available voices:', voices.length);
+      // NEW: Pause microphone during TTS playback to prevent feedback loop
+      const shouldPauseMic = user?.isDeaf === false && isMicListening; // Pause only if hearing user with mic on
+      if (shouldPauseMic) {
+        console.log('[Auto-TTS] 🔇 Pausing microphone to prevent feedback loop');
+        stopSpeechRecognition(false); // Normal stop, not aggressive abort
+        setIsMicPausedForTTS(true);
+        isMicPausedRef.current = true; // Track in ref for immediate access in handlers
         
-        if (user?.voiceSettings?.voiceName) {
-          const voice = voices.find(v => v.name === user?.voiceSettings?.voiceName);
-          if (voice) {
-            utterance.voice = voice;
-            console.log('Using voice:', voice.name);
+        // Track which message caused this pause (to prevent duplicate resume attempts)
+        if (latestMsg.timestamp) {
+          pausedMessageTimestampRef.current = latestMsg.timestamp;
+          console.log('[Auto-TTS] Marked pause for message timestamp:', latestMsg.timestamp);
+        }
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(latestMsg.text);
+      
+      // Use sender's voice settings if available, with safe defaults
+      try {
+        utterance.rate = latestMsg.voiceSettings?.rate ?? 1.0;
+        utterance.pitch = latestMsg.voiceSettings?.pitch ?? 1.0;
+      } catch (error) {
+        console.warn('[Auto-TTS] Error setting rate/pitch, using defaults:', error);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+      }
+      utterance.volume = 1.0;
+
+      const setVoiceAndSpeak = () => {
+        try {
+          const voices = window.speechSynthesis.getVoices();
+          console.log('[Auto-TTS] Available voices count:', voices.length);
+          
+          if (!voices || voices.length === 0) {
+            console.warn('[Auto-TTS] No voices available, will use default');
+            window.speechSynthesis.speak(utterance);
+            return;
+          }
+
+          // Helper function to detect gender from voice name
+          const detectGender = (voiceName: string): 'male' | 'female' | 'neutral' => {
+            const nameLower = voiceName.toLowerCase();
+            // Female keywords
+            if (nameLower.includes('female') || nameLower.includes('woman') || 
+                nameLower.includes('girl') || nameLower.includes('mrs') ||
+                nameLower.includes('clara') || nameLower.includes('victoria') ||
+                nameLower.includes('amira') || nameLower.includes('nadia') ||
+                nameLower.includes('denise') || nameLower.includes('linda')) {
+              return 'female';
+            }
+            // Male keywords
+            if (nameLower.includes('male') || nameLower.includes('man') ||
+                nameLower.includes('boy') || nameLower.includes('mr') ||
+                nameLower.includes('george') || nameLower.includes('james') ||
+                nameLower.includes('david') || nameLower.includes('pablo') ||
+                nameLower.includes('carlos') || nameLower.includes('francisco')) {
+              return 'male';
+            }
+            return 'neutral';
+          };
+
+          // Helper function to extract language code from voice
+          const extractLanguageCode = (voice: SpeechSynthesisVoice): string => {
+            // voice.lang is like "en-US", "fr-FR", etc.
+            return voice.lang.split('-')[0].toLowerCase();
+          };
+
+          // Helper function to detect language from voice name
+          const detectLanguageFromName = (voiceName: string): string | null => {
+            const nameLower = voiceName.toLowerCase();
+            
+            const languageMap: { [key: string]: string } = {
+              'french': 'fr', 'français': 'fr',
+              'spanish': 'es', 'español': 'es',
+              'german': 'de', 'deutsch': 'de',
+              'italian': 'it', 'italiano': 'it',
+              'portuguese': 'pt', 'português': 'pt',
+              'dutch': 'nl', 'nederlands': 'nl',
+              'polish': 'pl', 'polski': 'pl',
+              'russian': 'ru', 'русский': 'ru',
+              'chinese': 'zh', 'japanese': 'ja', 'korean': 'ko',
+              'hindi': 'hi', 'arabic': 'ar', 'turkish': 'tr'
+            };
+
+            for (const [lang, code] of Object.entries(languageMap)) {
+              if (nameLower.includes(lang)) {
+                return code;
+              }
+            }
+            return null;
+          };
+
+          // Try to find sender's selected voice
+          if (latestMsg.voiceSettings?.voiceName) {
+            const senderVoiceName = latestMsg.voiceSettings.voiceName;
+            const senderGender = detectGender(senderVoiceName);
+            
+            console.log('[Auto-TTS] 🔍 Looking for voice:', senderVoiceName);
+            console.log('[Auto-TTS] Detected sender gender:', senderGender);
+            
+            // Try exact match first
+            let matchedVoice = voices.find(v => v.name === senderVoiceName);
+            
+            if (matchedVoice) {
+              console.log('[Auto-TTS] ✓ Found sender voice (EXACT MATCH):', matchedVoice.name);
+              utterance.voice = matchedVoice;
+              window.speechSynthesis.speak(utterance);
+              return;
+            }
+            
+            // Try case-insensitive match
+            console.log('[Auto-TTS] Exact match failed, trying case-insensitive...');
+            matchedVoice = voices.find(v => v.name.toLowerCase() === senderVoiceName.toLowerCase());
+            
+            if (matchedVoice) {
+              console.log('[Auto-TTS] ✓ Found sender voice (CASE-INSENSITIVE):', matchedVoice.name);
+              utterance.voice = matchedVoice;
+              window.speechSynthesis.speak(utterance);
+              return;
+            }
+            
+            // Try partial match
+            console.log('[Auto-TTS] Case-insensitive failed, trying partial match...');
+            matchedVoice = voices.find(v => v.name.toLowerCase().includes(senderVoiceName.toLowerCase()));
+            
+            if (matchedVoice) {
+              console.log('[Auto-TTS] ✓ Found sender voice (PARTIAL MATCH):', matchedVoice.name);
+              utterance.voice = matchedVoice;
+              window.speechSynthesis.speak(utterance);
+              return;
+            }
+            
+            console.warn('[Auto-TTS] ✗ Sender voice not found on this system:', senderVoiceName);
+            
+            // NEW ENHANCED FALLBACK CHAIN
+            const detectedLanguage = detectLanguageFromName(senderVoiceName);
+            console.log('[Auto-TTS] Detected language from voice name:', detectedLanguage);
+            
+            // Priority 1: Same language + same gender
+            if (detectedLanguage && senderGender !== 'neutral') {
+              console.log('[Auto-TTS] 🔍 Searching for voice in', detectedLanguage, 'with gender:', senderGender);
+              const sameLangSameGender = voices.filter(v => {
+                const voiceLang = extractLanguageCode(v);
+                const voiceGender = detectGender(v.name);
+                return voiceLang === detectedLanguage && voiceGender === senderGender;
+              });
+              
+              if (sameLangSameGender.length > 0) {
+                console.log('[Auto-TTS] ✓ Found', sameLangSameGender[0].name, '(same language + same gender)');
+                utterance.voice = sameLangSameGender[0];
+                window.speechSynthesis.speak(utterance);
+                return;
+              }
+            }
+            
+            // Priority 2: Same language (any gender)
+            if (detectedLanguage) {
+              console.log('[Auto-TTS] 🔍 Searching for voice in', detectedLanguage, '(any gender)');
+              const sameLang = voices.filter(v => {
+                const voiceLang = extractLanguageCode(v);
+                return voiceLang === detectedLanguage;
+              });
+              
+              if (sameLang.length > 0) {
+                console.log('[Auto-TTS] ✓ Found', sameLang[0].name, '(same language)');
+                utterance.voice = sameLang[0];
+                window.speechSynthesis.speak(utterance);
+                return;
+              }
+            }
+            
+            // Priority 3: English with matching gender
+            if (senderGender !== 'neutral') {
+              console.log('[Auto-TTS] 🔍 Searching for English voice with gender:', senderGender);
+              const englishSameGender = voices.filter(v => {
+                const voiceLang = extractLanguageCode(v);
+                const voiceGender = detectGender(v.name);
+                return voiceLang === 'en' && voiceGender === senderGender;
+              });
+              
+              if (englishSameGender.length > 0) {
+                console.log('[Auto-TTS] ✓ Found', englishSameGender[0].name, '(English with matching gender)');
+                utterance.voice = englishSameGender[0];
+                window.speechSynthesis.speak(utterance);
+                return;
+              }
+            }
+            
+            // Priority 4: Default English voice (any gender)
+            console.log('[Auto-TTS] 🔄 Falling back to default English voice');
+            const englishVoices = voices.filter(v => extractLanguageCode(v) === 'en');
+            
+            if (englishVoices.length > 0) {
+              const defaultEnglishVoice = englishVoices[0];
+              console.log('[Auto-TTS] ✓ Using:', defaultEnglishVoice.name, '(' + defaultEnglishVoice.lang + ')');
+              utterance.voice = defaultEnglishVoice;
+              window.speechSynthesis.speak(utterance);
+              return;
+            } else {
+              console.warn('[Auto-TTS] ⚠️ No English voices found, using system default');
+              // utterance.voice will be undefined, system will use default
+              window.speechSynthesis.speak(utterance);
+              return;
+            }
           } else {
-            console.log('Voice not found, using default');
+            console.log('[Auto-TTS] No voiceName provided in message voiceSettings');
+          }
+
+          // If no voiceSettings provided at all, use default English
+          console.log('[Auto-TTS] 🔄 Using default voice (no voiceSettings)');
+          const englishVoices = voices.filter(v => extractLanguageCode(v) === 'en');
+          
+          if (englishVoices.length > 0) {
+            const defaultEnglishVoice = englishVoices[0];
+            console.log('[Auto-TTS] ✓ Using default English voice:', defaultEnglishVoice.name);
+            utterance.voice = defaultEnglishVoice;
+          }
+          
+          console.log('[Auto-TTS] 🔊 About to speak with voice:', utterance.voice?.name || '(system default)');
+          console.log('[Auto-TTS] Utterance settings - rate:', utterance.rate, 'pitch:', utterance.pitch, 'volume:', utterance.volume);
+          window.speechSynthesis.speak(utterance);
+        } catch (error) {
+          console.error('[Auto-TTS] Error in setVoiceAndSpeak:', error);
+          try {
+            window.speechSynthesis.speak(utterance);
+          } catch (fallbackError) {
+            console.error('[Auto-TTS] Fallback speak also failed:', fallbackError);
           }
         }
-        
-        // Ensure speech completes
-        utterance.onend = () => {
-          console.log('Speech completed successfully');
-        };
-        
-        utterance.onerror = (event) => {
-          console.error('Speech error:', event);
-        };
-        
-        // Cancel any existing speech before starting new one
-        window.speechSynthesis.cancel();
-        
-        // Small delay to ensure cancel is processed
-        setTimeout(() => {
-          window.speechSynthesis.speak(utterance);
-          console.log('Speaking:', entry.text);
-        }, 100);
       };
-      
-      // If voices are not loaded yet, wait for them
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
+
+      utterance.onerror = (event) => {
+        console.error('[Auto-TTS] Speech synthesis error:', event.error);
+        // Resume microphone on error - check using ref for immediate state access
+        const shouldResume = isMicPausedRef.current && pausedMessageTimestampRef.current !== null;
+        console.log('[Auto-TTS] Error handler - shouldResume:', shouldResume, 'isMicPausedRef:', isMicPausedRef.current, 'pausedTimestamp:', pausedMessageTimestampRef.current);
+        
+        if (shouldResume) {
+          console.log('[Auto-TTS] ⚠️ TTS error - resuming microphone');
+          setIsMicPausedForTTS(false);
+          isMicPausedRef.current = false;
+          pausedMessageTimestampRef.current = null; // Clear to prevent duplicate resumes
+          
+          // Clear any existing safety timeout
+          if (micSafetyTimeoutRef.current) {
+            clearTimeout(micSafetyTimeoutRef.current);
+            micSafetyTimeoutRef.current = null;
+          }
+          
+          // Wait longer to ensure old recognition fully stopped
+          setTimeout(() => {
+            console.log('[Auto-TTS] Attempting to resume speech recognition after error');
+            setIsMicListening(true);
+            startSpeechRecognition(
+              {
+                continuous: true,
+                interimResults: true,
+                lang: 'en-US',
+              },
+              {
+                onResult: (result) => {
+                  // Clear safety timeout once speech recognition actually starts working
+                  if (micSafetyTimeoutRef.current) {
+                    clearTimeout(micSafetyTimeoutRef.current);
+                    micSafetyTimeoutRef.current = null;
+                  }
+                  
+                  const currentTranscript = result.transcript;
+                  const lastFinal = lastFinalTranscriptRef.current;
+                  
+                  let newPart = '';
+                  if (lastFinal) {
+                    if (currentTranscript.startsWith(lastFinal)) {
+                      newPart = currentTranscript.slice(lastFinal.length).trim();
+                    } else {
+                      newPart = currentTranscript.trim();
+                    }
+                  } else {
+                    newPart = currentTranscript.trim();
+                  }
+                  
+                  if (newPart || !result.isFinal) {
+                    setSpeechEditable(newPart);
+                    setIsSpeechEditing(true);
+                  }
+                  
+                  if (result.isFinal && newPart) {
+                    const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+                    sentences.forEach((sentence) => {
+                      if (sentence.trim()) {
+                        console.log('Final sentence detected, sending to non-hearing:', sentence.trim());
+                        sendTranscript(sentence.trim());
+                      }
+                    });
+                    lastFinalTranscriptRef.current = currentTranscript;
+                    setSpeechEditable('');
+                    setIsSpeechEditing(false);
+                  }
+                },
+                onError: (error) => {
+                  console.error('Speech recognition error on resume:', error);
+                  setIsMicListening(false);
+                },
+                onEnd: () => {
+                  setIsMicListening(false);
+                },
+              }
+            ).catch(err => {
+              console.error('[Auto-TTS] Failed to resume speech recognition:', err);
+              setIsMicListening(false);
+            });
+            
+            // Safety timeout: Force mic open after 3 seconds if it hasn't started normally
+            micSafetyTimeoutRef.current = setTimeout(() => {
+              console.warn('[Auto-TTS] ⚠️ SAFETY TIMEOUT (error recovery): Forcing microphone open after 3 seconds');
+              setIsMicListening(true);
+              micSafetyTimeoutRef.current = null;
+            }, 3000);
+          }, 1200); // Even longer delay for error recovery
+        }
+      };
+
+      utterance.onend = () => {
+        console.log('[Auto-TTS] ✓ TTS completed - resuming microphone');
+        // Resume microphone when TTS finishes - check using ref for immediate state access
+        const shouldResume = isMicPausedRef.current && pausedMessageTimestampRef.current !== null;
+        console.log('[Auto-TTS] onend handler - shouldResume:', shouldResume, 'isMicPausedRef:', isMicPausedRef.current, 'pausedTimestamp:', pausedMessageTimestampRef.current);
+        
+        if (shouldResume) {
+          console.log('[Auto-TTS] Resuming mic for paused message');
+          setIsMicPausedForTTS(false);
+          isMicPausedRef.current = false;
+          pausedMessageTimestampRef.current = null; // Clear to prevent duplicate resumes
+          
+          // Clear any existing safety timeout
+          if (micSafetyTimeoutRef.current) {
+            clearTimeout(micSafetyTimeoutRef.current);
+            micSafetyTimeoutRef.current = null;
+          }
+          
+          // Wait longer to ensure old recognition fully stopped
+          setTimeout(() => {
+            console.log('[Auto-TTS] Attempting to resume speech recognition after TTS end');
+            setIsMicListening(true);
+            startSpeechRecognition(
+              {
+                continuous: true,
+                interimResults: true,
+                lang: 'en-US',
+              },
+              {
+                onResult: (result) => {
+                  // Clear safety timeout once speech recognition actually starts working
+                  if (micSafetyTimeoutRef.current) {
+                    clearTimeout(micSafetyTimeoutRef.current);
+                    micSafetyTimeoutRef.current = null;
+                  }
+                  
+                  const currentTranscript = result.transcript;
+                  const lastFinal = lastFinalTranscriptRef.current;
+                  
+                  let newPart = '';
+                  if (lastFinal) {
+                    if (currentTranscript.startsWith(lastFinal)) {
+                      newPart = currentTranscript.slice(lastFinal.length).trim();
+                    } else {
+                      newPart = currentTranscript.trim();
+                    }
+                  } else {
+                    newPart = currentTranscript.trim();
+                  }
+                  
+                  if (newPart || !result.isFinal) {
+                    setSpeechEditable(newPart);
+                    setIsSpeechEditing(true);
+                  }
+                  
+                  if (result.isFinal && newPart) {
+                    const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+                    sentences.forEach((sentence) => {
+                      if (sentence.trim()) {
+                        console.log('Final sentence detected, sending to non-hearing:', sentence.trim());
+                        sendTranscript(sentence.trim());
+                      }
+                    });
+                    lastFinalTranscriptRef.current = currentTranscript;
+                    setSpeechEditable('');
+                    setIsSpeechEditing(false);
+                  }
+                },
+                onError: (error) => {
+                  console.error('[Auto-TTS] Speech recognition error on resume:', error);
+                  setIsMicListening(false);
+                },
+                onEnd: () => {
+                  console.log('[Auto-TTS] Speech recognition ended');
+                  setIsMicListening(false);
+                },
+              }
+            ).catch(err => {
+              console.error('[Auto-TTS] PROMISE REJECTED - Failed to resume speech recognition:', err);
+              console.error('[Auto-TTS] Error details:', err instanceof Error ? err.message : err);
+              setIsMicListening(false);
+            });
+            
+            // Safety timeout: Force mic open after 3 seconds if it hasn't started normally
+            micSafetyTimeoutRef.current = setTimeout(() => {
+              console.warn('[Auto-TTS] ⚠️ SAFETY TIMEOUT: Forcing microphone open after 3 seconds');
+              setIsMicListening(true);
+              micSafetyTimeoutRef.current = null;
+            }, 3000);
+          }, 1000); // Increased delay to 1000ms to ensure proper cleanup
+        }
+      };
+
+      try {
+        if (!window.speechSynthesis.getVoices() || window.speechSynthesis.getVoices().length === 0) {
+          console.log('[Auto-TTS] Voices not loaded yet, waiting for onvoiceschanged');
+          window.speechSynthesis.onvoiceschanged = () => {
+            setVoiceAndSpeak();
+          };
+        } else {
           setVoiceAndSpeak();
-        };
-      } else {
-        setVoiceAndSpeak();
+        }
+      } catch (error) {
+        console.error('[Auto-TTS] Error during voice setup:', error);
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch (fallbackError) {
+          console.error('[Auto-TTS] Final fallback failed:', fallbackError);
+        }
       }
+    } else {
+      const reason = !latestMsg.shouldSpeak ? 'shouldSpeak=false (deaf)' : latestMsg.isLocal ? 'local' : 'no text';
+      console.log('[Auto-TTS] ✗ NOT speaking -', reason);
     }
-  }, [signService, sendTranslation, user?.voiceSettings, user?.isDeaf]);
+  }, [translationMessages, user?.isDeaf, isMicListening]);
 
   const endCall = useCallback(() => {
+    console.log('[CallModal] Ending call - stopping services and media');
+    
     stopRecognition();
     // Stop microphone if it's listening
     if (isMicListening) {
       handleMicToggle();
     }
     
-    // Stop all tracks in local stream to turn off camera
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+    // CRITICAL: Stop all tracks using refs to avoid stale closures
+    // Local stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        console.log('[CallModal] Stopping local track:', track.kind, 'enabled:', track.enabled);
+        track.stop();
+      });
     }
     
-    // Stop all tracks in remote stream
-    if (remoteStream) {
-      remoteStream.getTracks().forEach(track => track.stop());
+    // Remote stream
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(track => {
+        console.log('[CallModal] Stopping remote track:', track.kind);
+        track.stop();
+      });
     }
     
+    // Detach video elements before cleanup
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    
+    // Now notify the service to clean up state
     contextEndCall();
-  }, [contextEndCall, stopRecognition, isMicListening, localStream, remoteStream, handleMicToggle]);
+  }, [contextEndCall, stopRecognition, isMicListening, handleMicToggle]);
 
   // Get current preview text
   const previewText = useMemo(() => {
@@ -435,19 +926,26 @@ const CallModal = () => {
             )}
           </div>
           
-          {/* Incoming text from hearing user */}
+          {/* Incoming text from other user - show both translationMessages and transcriptMessages */}
           <div>
             <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">What they're saying</p>
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 min-h-[60px] max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-700">
-              {transcriptMessages.length > 0 ? (
-                transcriptMessages.slice(-3).map((msg, index) => (
-                  <p key={index} className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
-                    {msg.text}
-                  </p>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400 italic">Waiting...</p>
-              )}
+              {(() => {
+                // Combine and filter: show remote translationMessages + all transcriptMessages
+                const remoteTranslations = translationMessages.filter(msg => msg.isLocal === false);
+                const allTranscripts = transcriptMessages;
+                const combined = [...remoteTranslations, ...allTranscripts].sort((a, b) => a.timestamp - b.timestamp);
+                
+                return combined.length > 0 ? (
+                  combined.slice(-3).map((msg, index) => (
+                    <p key={index} className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
+                      {msg.text}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">Waiting...</p>
+                );
+              })()}
             </div>
           </div>
           
@@ -489,27 +987,32 @@ const CallModal = () => {
           {isSpeechEditing && (
             <p className="text-xs text-blue-500 mt-1">Listening...</p>
           )}
+          {isMicPausedForTTS && (
+            <p className="text-xs text-orange-500 mt-1 font-semibold">🔇 Listening paused (remote voice speaking)</p>
+          )}
         </div>
         <div className="mt-2 text-xs text-black dark:text-gray-400">
-          Status: {isMicListening ? 'Listening' : 'Not listening'} | 
+          Status: {isMicPausedForTTS ? '🔇 Paused (TTS)' : isMicListening ? '🎤 Listening' : 'Not listening'} | 
           Editing: {isSpeechEditing ? 'Yes' : 'No'} |
           Text: "{speechEditable || 'Empty'}"
         </div>
       </div>
 
-      {/* Incoming sign translations */}
+      {/* Incoming sign translations - ONLY show remote messages (isLocal: false) */}
       <div className="flex-1 bg-white dark:bg-slate-900 p-4 overflow-y-auto relative">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What they're signing</h3>
         <div className="space-y-2">
-          {translationMessages.length > 0 ? (
-            translationMessages.map((msg, index) => (
-              <div key={index} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
-                <p className="text-sm text-slate-900 dark:text-white">{msg.text}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  {formatTimestamp(msg.timestamp)}
-                </p>
-              </div>
-            ))
+          {translationMessages.filter(msg => msg.isLocal === false).length > 0 ? (
+            translationMessages
+              .filter(msg => msg.isLocal === false)
+              .map((msg, index) => (
+                <div key={index} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-sm text-slate-900 dark:text-white">{msg.text}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {formatTimestamp(msg.timestamp)}
+                  </p>
+                </div>
+              ))
           ) : (
             <p className="text-slate-500 dark:text-slate-400 text-center py-8">
               Waiting for their signs...

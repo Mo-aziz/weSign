@@ -20,6 +20,7 @@ export type AppUser = {
 export type Contact = {
   id: string;
   username: string;
+  isDeaf?: boolean; // True if contact is deaf/non-hearing, false if hearing
 };
 
 type AppContextValue = {
@@ -30,6 +31,7 @@ type AppContextValue = {
   logout: () => void;
   addContact: (username: string) => { success: boolean; message?: string };
   removeContact: (contactId: string) => void;
+  updateContact: (contactId: string, isDeaf: boolean) => void;
   toggleDarkMode: () => void;
   updateUser: (updates: Partial<Omit<AppUser, 'id'>>) => void;
   // Call-related properties
@@ -42,9 +44,9 @@ type AppContextValue = {
   endCall: () => void;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
-  translationMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean }>;
+  translationMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean; isLocal?: boolean; voiceSettings?: VoiceSettings }>;
   transcriptMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean }>;
-  sendTranslation: (text: string, shouldSpeak: boolean) => void;
+  sendTranslation: (text: string, shouldSpeak: boolean, voiceSettings?: VoiceSettings) => void;
   sendTranscript: (text: string) => void;
   isCameraEnabled: boolean;
   isMicEnabled: boolean;
@@ -55,6 +57,7 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'signlang.theme';
+const VOICE_SETTINGS_STORAGE_KEY = 'signlang.voiceSettings';
 
 const getInitialDarkMode = () => {
   if (typeof window === 'undefined') return true;
@@ -64,10 +67,34 @@ const getInitialDarkMode = () => {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
 };
 
+const getStoredVoiceSettings = (): VoiceSettings | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = window.localStorage.getItem(VOICE_SETTINGS_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.error('Error loading voice settings from localStorage:', error);
+    return null;
+  }
+};
+
+const saveVoiceSettingsToStorage = (settings: VoiceSettings | undefined) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (settings) {
+      window.localStorage.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } else {
+      window.localStorage.removeItem(VOICE_SETTINGS_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.error('Error saving voice settings to localStorage:', error);
+  }
+};
+
 const defaultContacts: Contact[] = [
-  { id: 'mentor-7p39f1', username: 'Mentor' },
-  { id: 'interpreter-h42km0', username: 'Interpreter' },
-  { id: 'friend-lm229v', username: 'Amelia' },
+  { id: 'mentor-7p39f1', username: 'Mentor', isDeaf: false },
+  { id: 'interpreter-h42km0', username: 'Interpreter', isDeaf: false },
+  { id: 'friend-lm229v', username: 'Amelia', isDeaf: true },
 ];
 
 const generateUserId = (username: string) => {
@@ -125,9 +152,19 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [darkMode]);
 
+  // Persist voice settings to localStorage whenever they change
+  useEffect(() => {
+    if (user?.voiceSettings) {
+      saveVoiceSettingsToStorage(user.voiceSettings);
+    }
+  }, [user?.voiceSettings?.voiceName, user?.voiceSettings?.rate, user?.voiceSettings?.pitch]);
+
   const login: AppContextValue['login'] = ({ username, isDeaf }) => {
     const id = generateUserId(username);
-    setUser({ id, username, isDeaf });
+    const storedVoiceSettings = getStoredVoiceSettings();
+    const newUser = { id, username, isDeaf, voiceSettings: storedVoiceSettings || undefined };
+    console.log('[AppContext] Login:', { username, isDeaf, userId: id });
+    setUser(newUser);
   };
 
   const logout = () => {
@@ -145,7 +182,9 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const id = generateUserId(trimmed);
-    setContacts((prev) => [...prev, { id, username: trimmed }]);
+    // Default new contacts to the SAME type as current user
+    // This ensures the system properly enforces calling rules
+    setContacts((prev) => [...prev, { id, username: trimmed, isDeaf: user?.isDeaf ?? false }]);
     return { success: true };
   };
 
@@ -153,14 +192,25 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
   };
 
+  const updateContact: AppContextValue['updateContact'] = (contactId, isDeaf) => {
+    setContacts((prev) => 
+      prev.map((contact) => 
+        contact.id === contactId ? { ...contact, isDeaf } : contact
+      )
+    );
+  };
+
   const toggleDarkMode = () => {
     setDarkMode((prev) => !prev);
   };
 
   const updateUser: AppContextValue['updateUser'] = (updates) => {
+    console.log('[AppContext] updateUser called with:', updates);
     setUser((prev) => {
       if (!prev) return prev;
-      return { ...prev, ...updates };
+      const updated = { ...prev, ...updates };
+      console.log('[AppContext] User updated:', { username: updated.username, isDeaf: updated.isDeaf });
+      return updated;
     });
   };
 
@@ -172,7 +222,8 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
       login, 
       logout, 
       addContact, 
-      removeContact, 
+      removeContact,
+      updateContact,
       toggleDarkMode, 
       updateUser,
       callState,
@@ -193,7 +244,7 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
       toggleCamera,
       toggleMic
     }),
-    [user, contacts, darkMode, callState, currentCall, incomingCall, localStream, remoteStream, translationMessages, transcriptMessages, isCameraEnabled, isMicEnabled]
+    [user, contacts, darkMode, login, logout, addContact, removeContact, updateContact, toggleDarkMode, updateUser, callState, currentCall, incomingCall, initiateCall, acceptCall, rejectCall, endCall, localStream, remoteStream, translationMessages, transcriptMessages, sendTranslation, sendTranscript, isCameraEnabled, isMicEnabled, toggleCamera, toggleMic]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

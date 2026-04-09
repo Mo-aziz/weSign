@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
+import fs from 'fs'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,8 +15,18 @@ export default defineConfig({
   clearScreen: false,
   // tauri expects a fixed port, fail if that port is not available
   server: {
+    https: {
+      key: fs.readFileSync(resolve(__dirname, 'certs/key.pem')),
+      cert: fs.readFileSync(resolve(__dirname, 'certs/cert.pem')),
+    },
+    host: '0.0.0.0', // Listen on all network interfaces (localhost + network)
     port: 1420,
     strictPort: true,
+    hmr: {
+      host: '192.168.100.80', // Use the network IP for HMR connections
+      port: 1420,
+      protocol: 'https',
+    },
   },
   // to make use of `TAURI_DEBUG` and other env variables
   // https://tauri.studio/v1/api/config#buildconfig.beforedevcommand

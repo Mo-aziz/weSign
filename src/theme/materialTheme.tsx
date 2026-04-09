@@ -79,16 +79,3 @@ export const materialTheme = {
     },
   },
 };
-
-// Material Icons component
-export const MaterialIcon = ({ icon, filled = false, className = "" }: { icon: string, filled?: boolean, className?: string }) => {
-  const fillStyle = filled ? "'FILL' 1" : "'FILL' 0";
-  return (
-    <span 
-      className={`material-symbols-outlined ${className}`}
-      style={{ fontVariationSettings: `${fillStyle}, 'wght' 400, 'GRAD' 0, 'opsz' 24` }}
-    >
-      {icon}
-    </span>
-  );
-};

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import VoiceSettings from '../components/VoiceSettings';
 import { speak } from '../services/localTTS';
+import { updateUserTypeOnServer } from '../services/useCallService';
 
 const Settings = () => {
   const { user, toggleDarkMode, updateUser, logout } = useAppContext();
@@ -12,11 +13,31 @@ const Settings = () => {
     pitch: user?.voiceSettings?.pitch ?? 1.0
   });
 
+  // Debug: Log when user or voiceSettings change
+  useEffect(() => {
+    console.log('[Settings Page] user object:', user);
+    console.log('[Settings Page] user.voiceSettings:', user?.voiceSettings);
+    console.log('[Settings Page] voiceName:', user?.voiceSettings?.voiceName);
+    console.log('[Settings Page] rate:', user?.voiceSettings?.rate);
+    console.log('[Settings Page] pitch:', user?.voiceSettings?.pitch);
+  }, [user?.voiceSettings?.voiceName, user?.voiceSettings?.rate, user?.voiceSettings?.pitch]);
+
+  // Debug: Log when local state changes
+  useEffect(() => {
+    console.log('[Settings Page] Local voiceSettings state:', voiceSettings);
+  }, [voiceSettings]);
+
   const handleSaveProfile = () => {
     if (!user?.username.trim()) {
       setStatusMessage('Username cannot be empty.');
       return;
     }
+
+    console.log('[Settings] Saving voice settings:', {
+      voiceName: voiceSettings.voiceName,
+      rate: voiceSettings.rate,
+      pitch: voiceSettings.pitch
+    });
 
     updateUser({ 
       username: user.username, 
@@ -32,6 +53,7 @@ const Settings = () => {
 
   const handleTestVoice = () => {
     const testText = "This is a test of your voice settings. If you can hear this clearly, your settings are working properly.";
+    console.log('[Settings] Testing voice with settings:', voiceSettings);
     speak(testText, {
       voiceName: voiceSettings.voiceName,
       rate: voiceSettings.rate,
@@ -40,14 +62,31 @@ const Settings = () => {
     setStatusMessage('Testing voice...');
   };
 
-  const handleToggleUserType = () => {
-    if (user) {
+  const handleToggleUserType = async () => {
+    if (!user) return;
+
+    const newIsDeaf = !user.isDeaf;
+    const newTypeLabel = newIsDeaf ? 'sign language user' : 'hearing user';
+
+    try {
+      setStatusMessage('Updating user type on server...');
+      console.log(`[Settings] Toggling user type from ${user.isDeaf} to ${newIsDeaf}`);
+      
+      // Update server first
+      await updateUserTypeOnServer(newIsDeaf);
+      console.log('[Settings] Server synchronized successfully');
+      
+      // Then update local state
       updateUser({
         username: user.username,
-        isDeaf: !user.isDeaf,
+        isDeaf: newIsDeaf,
         voiceSettings: user.voiceSettings
       });
-      setStatusMessage(`Switched to ${!user.isDeaf ? 'sign language user' : 'hearing user'} mode.`);
+      
+      setStatusMessage(`Successfully switched to ${newTypeLabel} mode.`);
+    } catch (error) {
+      console.error('[Settings] Failed to update user type:', error);
+      setStatusMessage(`Failed to change user type: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

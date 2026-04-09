@@ -27,8 +27,8 @@ const Login = () => {
       return;
     }
 
+    // Just call login - let the useEffect handle the navigation
     login({ username, isDeaf });
-    navigate('/contacts', { replace: true });
   };
 
   return (

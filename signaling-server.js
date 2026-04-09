@@ -1,24 +1,50 @@
-// Simple WebSocket Signaling Server for Sign Language Communicator
+// Simple WebSocket Signaling Server for Sign Language Communicator (WSS - Secure)
 import { WebSocketServer } from 'ws';
-import { createServer } from 'http';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3001;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const server = createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ status: 'Signaling server running', port: PORT }));
-});
+// Certificate paths
+const keyFile = path.join(__dirname, 'certs', 'key.pem');
+const certFile = path.join(__dirname, 'certs', 'cert.pem');
+
+// Check if certificates exist
+if (!fs.existsSync(keyFile) || !fs.existsSync(certFile)) {
+  console.error('\n❌ HTTPS certificates not found!');
+  console.error(`Expected: ${keyFile}`);
+  console.error(`Expected: ${certFile}\n`);
+  console.error('Generate certificates by running:');
+  console.error('  node scripts/generate-certs.js\n');
+  process.exit(1);
+}
+
+// Create HTTPS server with WebSocket
+const server = https.createServer(
+  {
+    key: fs.readFileSync(keyFile),
+    cert: fs.readFileSync(certFile),
+  },
+  (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'Signaling server running on WSS', port: PORT }));
+  }
+);
 
 const wss = new WebSocketServer({ server });
 
-// Store connected clients: userId -> WebSocket
+// Store connected clients: userId -> { ws: WebSocket, username: string, isDeaf: boolean }
 const clients = new Map();
 
 wss.on('connection', (ws, req) => {
   let userId = null;
   let username = null;
+  let isDeaf = null;
 
-  console.log('New WebSocket connection from:', req.socket.remoteAddress);
+  console.log('✓ New WebSocket connection from:', req.socket.remoteAddress);
 
   ws.on('message', (message) => {
     try {
@@ -26,18 +52,40 @@ wss.on('connection', (ws, req) => {
       
       switch (data.type) {
         case 'register':
-          // Client registering with their user ID
           userId = data.userId;
           username = data.username;
-          clients.set(userId, ws);
-          console.log(`User registered: ${username} (${userId})`);
-          
-          // Send confirmation
+          isDeaf = data.isDeaf;
+          clients.set(userId, { ws, username, isDeaf });
+          console.log(`✓ User registered: ${username} (${userId}) - ${isDeaf ? 'Deaf' : 'Hearing'}`);
           ws.send(JSON.stringify({
             type: 'registered',
             success: true,
             userId: userId
           }));
+          break;
+
+        case 'query-user':
+          // Query for a user's status
+          const targetUser = clients.get(data.userId);
+          if (targetUser) {
+            ws.send(JSON.stringify({
+              type: 'user-status',
+              userId: data.userId,
+              username: targetUser.username,
+              isDeaf: targetUser.isDeaf,
+              isOnline: true
+            }));
+            console.log(`✓ Sent status for ${targetUser.username} (isDeaf: ${targetUser.isDeaf}) to ${username}`);
+          } else {
+            // User offline - respond with default (deaf=true to be safe, so hearing can't call deaf who's offline)
+            ws.send(JSON.stringify({
+              type: 'user-status',
+              userId: data.userId,
+              isDeaf: true,
+              isOnline: false
+            }));
+            console.log(`⚠ User ${data.userId} not found/offline, reporting as deaf and offline`);
+          }
           break;
 
         case 'call-invite':
@@ -47,14 +95,14 @@ wss.on('connection', (ws, req) => {
         case 'offer':
         case 'answer':
         case 'ice-candidate':
-          // Forward signaling messages to target user
+        case 'sign-translation':
+        case 'speech-transcript':
           const targetWs = clients.get(data.to);
-          if (targetWs && targetWs.readyState === 1) {
-            targetWs.send(JSON.stringify(data));
-            console.log(`Forwarded ${data.type} from ${data.from} to ${data.to}`);
+          if (targetWs && targetWs.ws.readyState === 1) {
+            targetWs.ws.send(JSON.stringify(data));
+            console.log(`✓ Forwarded ${data.type} from ${data.from} to ${data.to}`);
           } else {
-            console.log(`Target user ${data.to} not connected`);
-            // Notify sender that target is offline
+            console.log(`⚠ Target user ${data.to} not connected for ${data.type}`);
             ws.send(JSON.stringify({
               type: 'error',
               message: `User ${data.to} is offline`
@@ -63,7 +111,7 @@ wss.on('connection', (ws, req) => {
           break;
 
         default:
-          console.log('Unknown message type:', data.type);
+          console.log('⚠ Unknown message type:', data.type);
       }
     } catch (error) {
       console.error('Error processing message:', error);
@@ -73,7 +121,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (userId) {
       clients.delete(userId);
-      console.log(`User disconnected: ${username} (${userId})`);
+      console.log(`✓ User disconnected: ${username} (${userId})`);
     }
   });
 
@@ -82,9 +130,10 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Signaling server running on port ${PORT}`);
-  console.log(`WebSocket URL: ws://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n✓ Signaling server running on WSS port ${PORT}`);
+  console.log(`✓ Both HTTP and WSS available (WSS for remote clients)`);
+  console.log(`✓ Access via: wss://192.168.100.80:${PORT}/\n`);
 });
 
 // Handle graceful shutdown

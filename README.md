@@ -8,15 +8,43 @@ A modern desktop application that enables seamless communication between deaf an
 
 1. [Project Overview](#project-overview)
 2. [Key Features](#key-features)
-3. [Technology Stack](#technology-stack)
-4. [Project Structure](#project-structure)
-5. [Prerequisites](#prerequisites)
-6. [Installation & Setup](#installation--setup)
-7. [Running the Application](#running-the-application)
-8. [Testing the Application](#testing-the-application)
-9. [Building for Production](#building-for-production)
-10. [Troubleshooting](#troubleshooting)
-11. [API Reference](#api-reference)
+3. [What's New](#whats-new)
+4. [Technology Stack](#technology-stack)
+5. [Project Structure](#project-structure)
+6. [Prerequisites](#prerequisites)
+7. [Installation & Setup](#installation--setup)
+8. [Running the Application](#running-the-application)
+9. [Testing the Application](#testing-the-application)
+10. [Building for Production](#building-for-production)
+11. [Troubleshooting](#troubleshooting)
+12. [API Reference](#api-reference)
+
+---
+
+## What's New
+
+### Latest Updates (V2)
+
+ **Enhanced Voice Intelligence**
+- Gender-aware voice selection: Female speakers hear female voices, male speakers hear male voices
+- Language-intelligent fallback: System automatically selects the closest available voice matching sender's language preferences
+- 8-priority matching chain ensures optimal voice selection across different operating systems
+
+ **HTTPS & Security**
+- Full HTTPS encryption on both desktop and web connections
+- Self-signed mkcert certificates for secure development
+- WSS (WebSocket Secure) for encrypted signaling
+- All peer-to-peer data transmitted through encrypted channels
+
+ **Deaf-to-Deaf Communication**
+- Support for deaf users to call other deaf users
+- Live sign language recognition and transmission
+- Camera-based communication for sign language
+
+ **Microphone Auto-Control**
+- Automatic pause/resume of microphone during text-to-speech
+- 3-second safety fallback ensures microphone always resumes
+- Prevents audio feedback loops while maintaining seamless experience
 
 ---
 
@@ -35,6 +63,7 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 - 🏥 **Healthcare**: Remote consultations with real-time translation
 - 💼 **Business**: Accessible team meetings and calls
 - 👥 **Social**: Easy communication across language barriers
+- 🧑‍🤝‍🧑 **Deaf Community**: Secure video calls between deaf users with sign recognition
 
 ---
 
@@ -45,19 +74,50 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 -  Customizable user preferences (deaf/hearing designation)
 -  Voice settings (choice of voice, pitch, rate) for text-to-speech
 
+### Communication Modes
+-  **Deaf-to-Deaf Calls**: Two deaf users communicate via sign language with live recognition
+-  **Hearing-to-Hearing Calls**: Two hearing users communicate via speech with TTS playback
+-  **Cross-Communication Ready**: Framework supports future mixed-mode calls
+
 ### Call Management
-- Real-time peer-to-peer video calls via WebRTC
+- Real-time peer-to-peer video calls via WebRTC (Deaf-to-Deaf & Hearing-to-Hearing)
 - Contact list with call history
 - Incoming call notifications and acceptance/rejection
 - Call timer showing elapsed time
 - Bidirectional media streams (camera for deaf, microphone for hearing)
+- **Call Eligibility Validation**: Intelligent call blocking system that validates both caller and callee user types at call time:
+  - ✅ **Allowed**: Deaf → Deaf, Deaf → Hearing, Hearing → Deaf
+  - ❌ **Blocked**: Hearing → Hearing (prevents inappropriate calls)
+  - Real-time server validation ensures accurate user type detection
+  - User type changes in Settings immediately sync to server
 
 ### Translation & Recognition
 - **Live Sign Recognition**: Detects signs and shows predictions
 - **Editable Predictions**: Double-click to correct misrecognized signs
 - **Speech-to-Text**: Converts hearing user's speech to captions
-- **Text-to-Speech**: Reads translations aloud with customizable voice
+- **Intelligent Text-to-Speech**: Reads translations aloud with smart voice selection
+- **Gender-Aware**: Automatically selects female/male voices matching sender's preference
+- **Language-Smart**: Chooses closest available voice when preferred language unavailable
+- **Priority Matching**: Same language + gender → Same language → English + gender → Default
+- **Auto-Microphone Control**: Automatically pauses/resumes to prevent feedback loops
 - **Translation History**: Stores and displays all messages from both users
+
+### HTTPS & Security
+- **HTTPS Enabled**: All desktop and web connections use secure HTTPS
+- **Self-Signed Certificates**: Auto-generated mkcert certificates for development
+- **WebSocket Secure (WSS)**: Signaling server uses encrypted WebSocket connections
+- **Peer Data Encryption**: All peer-to-peer data transmitted via encrypted channels
+
+### Call Validation System
+- **Real-Time Eligibility Checks**: Every call attempt is validated against both users' current types (directly queried from server)
+- **Parallel Server Queries**: Both caller and callee user types are fetched simultaneously for accuracy
+- **User Type Synchronization**: When users change their type in Settings, changes are immediately sent to server and reflected in all call validations
+- **Intelligent Blocking Rules**:
+  - ✅ Deaf → Deaf: Uses video/sign recognition channel
+  - ✅ Deaf → Hearing: Deaf user signs, hearing user hears captions + TTS
+  - ✅ Hearing → Deaf: Hearing user speaks, deaf user sees captions + sign simulation
+  - ❌ Hearing → Hearing: **Blocked** - system prevents inappropriate same-mode calls
+- **Error Messaging**: Clear user feedback when calls are blocked with reason explanation
 
 ### User Interface
 - Dark/Light theme toggle with system preference detection
@@ -197,6 +257,16 @@ Should complete without errors. If you see errors, check TypeScript types and im
 
 ## Running the Application
 
+### ⚠️ Important: HTTPS & Certificates
+
+The app uses **HTTPS with self-signed certificates** (via mkcert) for security:
+- Dev server: `https://localhost:1420`
+- Signaling server: `wss://localhost:3001`
+
+On first launch, your browser may show a security warning. This is **normal and expected**. Simply click "Advanced" and proceed - the certificate is safe for development.
+
+**Note:** Camera/Microphone access requires HTTPS in modern browsers.
+
 ### Option 1: Desktop App (Recommended)
 Runs the full Tauri desktop application with both frontend (Vite) and native window:
 
@@ -204,14 +274,13 @@ Runs the full Tauri desktop application with both frontend (Vite) and native win
 npm run tauri:dev
 ```
 
-**App URL:** `http://localhost:1420/`
+**App URL:** `https://localhost:1420/`
 
 **What happens:**
-1. Vite dev server starts internally on `http://localhost:1420/`
+1. Vite dev server starts on `https://localhost:1420/` (HTTPS with self-signed cert)
 2. Tauri opens a native Windows window automatically displaying the React app
-3. App is accessible in browser at `http://localhost:1420/` (can also open manually)
-4. Hot module replacement (HMR) enabled for instant code updates
-5. Opens DevTools for debugging (F12 in Tauri window)
+3. Hot module replacement (HMR) enabled for instant code updates
+4. Opens DevTools for debugging (F12 in Tauri window)
 
 ### Option 2: Web Browser Only
 Test the React app in your default browser (without desktop wrapper):
@@ -220,7 +289,9 @@ Test the React app in your default browser (without desktop wrapper):
 npm run dev
 ```
 
-**Access at:** `http://localhost:5173`
+**Access at:** `https://localhost:1420`
+
+**Note:** Self-signed certificate warning is expected - proceed anyway.
 
 **Limitations:**
 - Tauri APIs won't work
@@ -236,13 +307,14 @@ npm run server
 
 **Output:** 
 ```
-Signaling server running on port 3001
+Signaling server running on wss://localhost:3001
 ```
 
 **What it does:**
-- Enables peer-to-peer call connections between multiple users
+- Enables peer-to-peer call connections between multiple users (Deaf-to-Deaf & Hearing-to-Hearing)
 - Exchanges WebRTC offer/answer/ICE candidates
 - Relays translation messages between connected users
+- Uses WSS (WebSocket Secure) for encrypted signaling
 
 ---
 
@@ -272,33 +344,70 @@ Signaling server running on port 3001
 1. Start signaling server: `npm run server` (separate terminal)
 2. Launch app twice (two windows): `npm run tauri:dev`
 
-**On User A (Deaf - Camera):**
-1. Login as "deaf_user"
+**Test Case A: Deaf-to-Deaf Calling (Camera/Sign Language)**
+
+**On User A (Deaf):**
+1. Login as "deaf_user_1"
 2. Select **Deaf** preference
 3. Go to **Contacts**
-4. Add contact "hearing_user"
+4. Add contact "deaf_user_2"
 
-**On User B (Hearing - Microphone):**
-1. Login as "hearing_user"
-2. Select **Hearing** preference
+**On User B (Deaf):**
+1. Login as "deaf_user_2"
+2. Select **Deaf** preference
 3. Go to **Contacts**
-4. Add contact "deaf_user"
+4. Add contact "deaf_user_1"
 
 **Initiate Call:**
-1. User A clicks "Call" next to "hearing_user"
+1. User A clicks "Call" next to "deaf_user_2"
 2. User B sees incoming call notification
 3. User B accepts call
-4. Both see video/audio streams
+4. Both see video streams of each other signing
 5. Call timer starts counting
-6. User B speaks, gets converted to captions for User A
-7. User A signs, gets recognized and sent to User B
+6. Both users sign, signs are recognized and sent in real-time
+7. Each user sees sign predictions from the other
+8. Either user can end call independently
 
 **Expected Results:**
-- Bidirectional video/audio streams
+- Bidirectional video streams active
+- Sign recognition working both ways
 - Call timer increments
-- Translations exchange in real-time
+- Translation history updated with recognized signs
 - Both users can end call independently
 - No errors in browser console
+
+**Test Case B: Hearing-to-Hearing Calling (Microphone/Speech)**
+
+**On User C (Hearing):**
+1. Login as "hearing_user_1"
+2. Select **Hearing** preference
+3. Go to **Contacts**
+4. Add contact "hearing_user_2"
+
+**On User D (Hearing):**
+1. Login as "hearing_user_2"
+2. Select **Hearing** preference
+3. Go to **Contacts**
+4. Add contact "hearing_user_1"
+
+**Initiate Call:**
+1. User C clicks "Call" next to "hearing_user_2"
+2. User D sees incoming call notification
+3. User D accepts call
+4. Both users have audio streams active
+5. User C speaks → speech converted to captions for both
+6. User D speaks → speech converted to captions for both
+7. Both hear text-to-speech reading the captions
+   
+
+**Expected Results:**
+- Bidirectional audio streams active
+- Speech recognitions converted to captions
+- Text-to-speech playing with properly matched voices
+- Gender preference respected (female voice hears female, male hears male)
+- Language preference honored (Spanish user hears Spanish if available)
+- Call timer increments
+- No console errors
 
 ### Test Scenario 3: UI & Navigation
 
@@ -330,7 +439,51 @@ Signaling server running on port 3001
 - No console errors
 - Smooth transitions between screens
 
-### Test Scenario 4: Error Handling
+### Test Scenario 4: Voice Matching & TTS
+
+**Gender-Aware Voice Selection:**
+1. Go to **Settings**
+2. Select a **female voice** from dropdown (e.g., "Microsoft Zira", "Google US English Female")
+3. Click "Test Voice" - should hear female voice
+4. Save changes
+5. Start a call with another user
+6. That user speaks → TTS response uses female voice (if available on their system)
+
+**Language-Intelligent Voice Fallback:**
+1. Go to **Settings**
+2. Select a voice in a **non-English language** if available (e.g., "Google French", "Microsoft Marie French")
+3. Save changes
+4. Start a call
+5. When receiving audio from caller:
+   - If caller's voice is in the same language → System uses that language if available
+   - If caller's voice is different language → System falls back to English with same gender
+   - If no gender match available → System uses system default
+6. Check browser console for logs like:
+   - `[Auto-TTS] Found [voice] (same language + same gender)`
+   - `[Auto-TTS] Found [voice] (same language)`
+   - `[Auto-TTS] Found [voice] (English with matching gender)`
+
+**Microphone Auto-Resume:**
+1. During a call, let the other user send a message
+2. Your microphone should pause to prevent feedback loop during TTS
+3. After TTS finishes (within 3 seconds), microphone should automatically resume
+4. Verify in browser console: `[Auto-TTS]  TTS completed - resuming microphone`
+
+**Expected Results:**
+- Voice selection respects gender preference
+- TTS language matches original speaker when available
+- Fallback chain works correctly when voices unavailable
+- Microphone resumes automatically after TTS
+- Console shows appropriate debug messages
+
+### Test Scenario 5: Error Handling
+
+**HTTPS Security Warning:**
+1. Open `https://localhost:1420` in browser
+2. Browser shows "Not secure" warning (expected for self-signed cert)
+3. Click "Advanced" → "Proceed to localhost"
+4. App loads normally
+5. No security impact in development environment
 
 **Deny Camera Permission:**
 1. Launch app
@@ -349,6 +502,13 @@ Signaling server running on port 3001
 2. App should detect disconnect
 3. Call should end gracefully
 4. Error message appears
+
+**WSS Connection Failed (Signaling Server Down):**
+1. Stop signaling server: `Ctrl+C` in server terminal
+2. Try to make a call from one user
+3. App should show connection error
+4. Restart server: `npm run server`
+5. Call should work again after reconnection
 
 ---
 
@@ -385,32 +545,40 @@ dist/                          # Static files ready for deployment
 
 ## Troubleshooting
 
-### Issue 1: "Command 'tauri' not found"
+### Issue 1: "Your connection is not private" - HTTPS Certificate Warning
+**Solution:** This is **normal and expected** with self-signed certificates in development.
+- Click "Advanced"
+- Click "Proceed to localhost" (or equivalent)
+- This is safe for development - the app uses secure mkcert certificates
+- Your browser will remember this and not show the warning again
+
+### Issue 2: "Command 'tauri' not found"
 **Solution:** Ensure Tauri CLI is installed:
 ```bash
 npm install
 npx tauri --version
 ```
 
-### Issue 2: Rust toolchain not found
+### Issue 3: Rust toolchain not found
 **Solution:** Install Rust:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup target add x86_64-pc-windows-msvc
 ```
 
-### Issue 3: Camera/Microphone not working
+### Issue 4: Camera/Microphone not working
 **Solution:**
 - Check Windows Privacy Settings → Camera/Microphone → allow app
+- Requires HTTPS (which app uses) for modern browser access
 - Try restarting app
 - Test webcam with another app (e.g., Windows Camera)
 
-### Issue 4: Signaling server connection fails
-**Error:** "Connection refused on port 3001"
+### Issue 5: Signaling server connection fails
+**Error:** "Connection refused on port 3001" or "Failed to connect to wss://localhost:3001"
 
 **Solution:**
 1. Ensure server runs: `npm run server`
-2. Check server is on `localhost:3001`:
+2. Check server is listening on `localhost:3001`:
    ```bash
    netstat -ano | findstr :3001
    ```
@@ -418,12 +586,12 @@ rustup target add x86_64-pc-windows-msvc
    ```javascript
    const PORT = process.env.PORT || 3001;  // Change 3001 to another port
    ```
-4. Update `useCallService.ts` to match:
+4. Update `useCallService.ts` to match the new port:
    ```typescript
-   const WS_URL = 'ws://localhost:3001';  // Update port here too
+   const WS_URL = 'wss://localhost:3001';  // Update port here too
    ```
 
-### Issue 5: WebRTC connection fails
+### Issue 6: WebRTC connection fails
 **Error:** "Failed to establish peer connection"
 
 **Possible Causes:**
@@ -436,7 +604,36 @@ rustup target add x86_64-pc-windows-msvc
 - Verify internet connection
 - Try from different network
 
-### Issue 6: TypeScript/ESLint errors
+### Issue 7: TTS Voice Not Working or Wrong Language
+**Error:** Text-to-speech plays but in wrong voice/language
+
+**Solution:**
+1. Go to **Settings** → **Voice Settings**
+2. Select a different voice from available options
+3. Click "Test Voice" to verify
+4. Check browser console for voice selection logs:
+   ```
+   [Auto-TTS] ✓ Found [voice] (same language + same gender)
+   ```
+5. If your preferred voice not available:
+   - Check Windows → Settings → Time & Language → Speech
+   - Install additional voices/languages
+   - App will automatically select closest match
+
+### Issue 8: Microphone Not Resuming After TTS
+**Error:** Microphone stays silent after text-to-speech plays
+
+**Solution:**
+1. Check browser console for messages like:
+   ```
+   [Auto-TTS] TTS completed - resuming microphone
+   [Auto-TTS] SAFETY TIMEOUT: Forcing microphone open after 3 seconds
+   ```
+2. If SAFETY TIMEOUT appears, there may be an issue with audio context
+3. Try refreshing the page
+4. Check that microphone permission is granted
+
+### Issue 9: TypeScript/ESLint errors
 **Solution:**
 ```bash
 npm run lint -- --fix          # Auto-fix linting issues
@@ -563,13 +760,6 @@ npm run tauri:build                        # Creates .exe installer
 npm run lint                               # Check code quality
 npm run build                              # Build frontend only
 ```
-
----
-
-**App URLs:**
-- Desktop: http://localhost:1420/
-- Browser only: http://localhost:5173/
-- Signaling Server: ws://localhost:3001/
 
 ---
 

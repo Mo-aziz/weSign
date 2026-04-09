@@ -40,6 +40,12 @@ interface TranslationMessage {
   text: string;
   timestamp: number;
   shouldSpeak: boolean;
+  isLocal?: boolean;
+  voiceSettings?: {
+    voiceName?: string;
+    rate?: number;
+    pitch?: number;
+  };
 }
 
 export type CallHookReturn = {
@@ -72,13 +78,53 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-// Use localhost by default so it works in browser and embedded runtimes.
-const WS_URL = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:3001';
+// Dynamically determine WebSocket URL based on current host (works on localhost and network)
+const getSignalingURL = (): string => {
+  // If explicitly set via environment variable, use that
+  if (import.meta.env.VITE_SIGNALING_URL) {
+    console.log('[getSignalingURL] Using VITE_SIGNALING_URL:', import.meta.env.VITE_SIGNALING_URL);
+    return import.meta.env.VITE_SIGNALING_URL;
+  }
+  
+  const host = window.location.hostname;
+  const port = 3001; // Signaling server port
+  const pageProtocol = window.location.protocol;
+  
+  // CRITICAL: HTTPS pages MUST use WSS, not WS (browser security)
+  // Do NOT use WS on HTTPS pages - it will be blocked!
+  const protocol = pageProtocol === 'https:' ? 'wss:' : 'ws:';
+  
+  const wsUrl = `${protocol}//${host}:${port}`;
+  console.log('[getSignalingURL] Page protocol:', pageProtocol, 'Host:', host, 'Port:', port);
+  console.log('[getSignalingURL] Using protocol:', protocol, 'Final URL:', wsUrl);
+  
+  // Safety check: if page is HTTPS but protocol is still WS, force WSS
+  if (pageProtocol === 'https:' && !wsUrl.startsWith('wss://')) {
+    console.warn('[getSignalingURL] WARNING: HTTPS page with WS protocol! Forcing WSS.');
+    return wsUrl.replace('ws://', 'wss://');
+  }
+  
+  return wsUrl;
+};
 
+let WS_URL = '';
 let ws: WebSocket | null = null;
 let messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();
+// Track addEventListener listeners separately to avoid infinite recursion
+let messageEventListeners: Array<(event: MessageEvent) => void> = [];
+// Track current user info to allow updates
+let currentUserInfo: { userId: string; username: string; isDeaf: boolean } | null = null;
 
-const connectWebSocket = (userId: string, username: string) => {
+const connectWebSocket = (userId: string, username: string, isDeaf: boolean) => {
+  if (WS_URL === '') {
+    WS_URL = getSignalingURL();
+    console.log('WebSocket URL:', WS_URL);
+  }
+  
+  // Store current user info for later updates
+  currentUserInfo = { userId, username, isDeaf };
+  console.log('[connectWebSocket] Storing user info:', currentUserInfo);
+  
   if (ws?.readyState === WebSocket.OPEN) return;
   
   ws = new WebSocket(WS_URL);
@@ -89,13 +135,25 @@ const connectWebSocket = (userId: string, username: string) => {
     ws?.send(JSON.stringify({
       type: 'register',
       userId,
-      username
+      username,
+      isDeaf
     }));
   };
   
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      
+      // Call addEventListener listeners directly (not via dispatchEvent to avoid infinite recursion)
+      messageEventListeners.forEach(listener => {
+        try {
+          listener(event);
+        } catch (error) {
+          console.error('Error in message event listener:', error);
+        }
+      });
+      
+      // Then handle regular signaling messages (have both type and to)
       if (data.type && data.to) {
         const callbacks = messageCallbacks.get(data.to);
         if (callbacks) {
@@ -114,8 +172,27 @@ const connectWebSocket = (userId: string, username: string) => {
   ws.onclose = () => {
     console.log('WebSocket disconnected, retrying in 3 seconds...');
     ws = null;
-    setTimeout(() => connectWebSocket(userId, username), 3000);
+    messageEventListeners = []; // Clear listeners on disconnect
+    setTimeout(() => connectWebSocket(userId, username, isDeaf), 3000);
   };
+  
+  // Override addEventListener to track message listeners
+  const originalAddEventListener = ws.addEventListener.bind(ws);
+  ws.addEventListener = function(type: string, listener: EventListener, ...args: any[]) {
+    if (type === 'message') {
+      messageEventListeners.push(listener as (event: MessageEvent) => void);
+    }
+    return originalAddEventListener(type, listener, ...args);
+  } as any;
+  
+  // Override removeEventListener to untrack message listeners
+  const originalRemoveEventListener = ws.removeEventListener.bind(ws);
+  ws.removeEventListener = function(type: string, listener: EventListener, ...args: any[]) {
+    if (type === 'message') {
+      messageEventListeners = messageEventListeners.filter(l => l !== listener);
+    }
+    return originalRemoveEventListener(type, listener, ...args);
+  } as any;
 };
 
 const sendSignalingMessage = (_toUserId: string, message: SignalingMessage) => {
@@ -138,6 +215,131 @@ const waitForWebSocketReady = async (timeoutMs: number = 5000): Promise<void> =>
       throw new Error('WebSocket connection timeout - signaling server may be unavailable');
     }
     await new Promise(resolve => setTimeout(resolve, 100));
+  }
+};
+
+// NEW: Export function to update user type on server (called from Settings when user changes type)
+export const updateUserTypeOnServer = async (newIsDeaf: boolean): Promise<void> => {
+  if (!currentUserInfo) {
+    console.error('[updateUserTypeOnServer] No current user info available');
+    throw new Error('User not logged in');
+  }
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('[updateUserTypeOnServer] WebSocket not connected');
+    throw new Error('WebSocket not connected');
+  }
+
+  console.log('[updateUserTypeOnServer] ✓ Updating user type on server');
+  console.log('[updateUserTypeOnServer] Old isDeaf:', currentUserInfo.isDeaf);
+  console.log('[updateUserTypeOnServer] New isDeaf:', newIsDeaf);
+
+  // Update local cache
+  currentUserInfo.isDeaf = newIsDeaf;
+
+  // Send update to server
+  ws.send(JSON.stringify({
+    type: 'register',
+    userId: currentUserInfo.userId,
+    username: currentUserInfo.username,
+    isDeaf: newIsDeaf
+  }));
+
+  console.log('[updateUserTypeOnServer] ✓ Type update sent to server');
+};
+export const queryUserStatus = async (userId: string): Promise<{ isDeaf: boolean; isOnline: boolean; username?: string }> => {
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reject(new Error('WebSocket not connected'));
+      return;
+    }
+
+    // Send query request
+    ws.send(JSON.stringify({
+      type: 'query-user',
+      userId
+    }));
+
+    // Set up one-time listener for response
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    
+    const handleResponse = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'user-status' && data.userId === userId) {
+          if (timeout) clearTimeout(timeout);
+          ws?.removeEventListener('message', handleResponse);
+          resolve({
+            isDeaf: data.isDeaf ?? false,
+            isOnline: data.isOnline ?? false,
+            username: data.username
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing user status response:', error);
+      }
+    };
+
+    // Add timeout
+    timeout = setTimeout(() => {
+      ws?.removeEventListener('message', handleResponse);
+      reject(new Error('User status query timeout'));
+    }, 5000);
+
+    ws?.addEventListener('message', handleResponse);
+  });
+};
+
+// NEW: Query BOTH users' status from server at call time (100% reliable)
+export const validateCallEligibility = async (
+  callerId: string,
+  calleeId: string
+): Promise<{ callerIsDeaf: boolean; calleeIsDeaf: boolean }> => {
+  try {
+    console.log('[validateCallEligibility] === STARTING VALIDATION ===');
+    console.log('[validateCallEligibility] Querying caller (ID: ' + callerId + ') and callee (ID: ' + calleeId + ')');
+    
+    // Query BOTH statuses in parallel
+    const [callerStatus, calleeStatus] = await Promise.all([
+      queryUserStatus(callerId),
+      queryUserStatus(calleeId)
+    ]);
+
+    console.log('[validateCallEligibility] Caller query result:', {
+      type: typeof callerStatus.isDeaf,
+      value: callerStatus.isDeaf,
+      username: callerStatus.username,
+      online: callerStatus.isOnline
+    });
+    console.log('[validateCallEligibility] Callee query result:', {
+      type: typeof calleeStatus.isDeaf,
+      value: calleeStatus.isDeaf,
+      username: calleeStatus.username,
+      online: calleeStatus.isOnline
+    });
+
+    // Ensure we have valid boolean values
+    if (typeof callerStatus.isDeaf !== 'boolean') {
+      throw new Error('Invalid caller isDeaf value from server: ' + callerStatus.isDeaf);
+    }
+    if (typeof calleeStatus.isDeaf !== 'boolean') {
+      throw new Error('Invalid callee isDeaf value from server: ' + calleeStatus.isDeaf);
+    }
+
+    const result = {
+      callerIsDeaf: callerStatus.isDeaf,
+      calleeIsDeaf: calleeStatus.isDeaf
+    };
+
+    console.log('[validateCallEligibility] ✓ Validation complete - returning:', {
+      callerIsDeaf: result.callerIsDeaf,
+      calleeIsDeaf: result.calleeIsDeaf
+    });
+
+    return result;
+  } catch (error) {
+    console.error('[validateCallEligibility] ❌ Validation failed:', error);
+    throw error;
   }
 };
 
@@ -246,8 +448,10 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     
     dataChannel.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('[Data Channel 1] Received message:', data);
       if (data.type === 'sign-translation') {
-        setTranslationMessages(prev => [...prev, data.message]);
+        console.log('[Data Channel 1] Translation received - shouldSpeak:', data.message.shouldSpeak);
+        setTranslationMessages(prev => [...prev, {...data.message, isLocal: false}]);
       } else if (data.type === 'speech-transcript') {
         setTranscriptMessages(prev => [...prev, data.message]);
       }
@@ -264,8 +468,10 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       };
       receiveChannel.onmessage = (msgEvent) => {
         const data = JSON.parse(msgEvent.data);
+        console.log('[Data Channel 2] Received message:', data);
         if (data.type === 'sign-translation') {
-          setTranslationMessages(prev => [...prev, data.message]);
+          console.log('[Data Channel 2] Translation received - shouldSpeak:', data.message.shouldSpeak);
+          setTranslationMessages(prev => [...prev, {...data.message, isLocal: false}]);
         } else if (data.type === 'speech-transcript') {
           setTranscriptMessages(prev => [...prev, data.message]);
         }
@@ -357,7 +563,7 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     if (!currentUserId) return;
 
     // Connect WebSocket
-    connectWebSocket(currentUserId, currentUsername);
+    connectWebSocket(currentUserId, currentUsername, isCurrentUserDeaf);
 
     const handleMessage = async (message: SignalingMessage) => {
       switch (message.type) {
@@ -375,6 +581,16 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
 
         case 'call-accept': {
           console.log('Received call-accept');
+          // Update current call with actual callee info from callee's response
+          const { callee } = message.payload as { callee?: CallPeer } || {};
+          if (callee) {
+            console.log('[call-accept] Updating callee info with actual isDeaf:', callee.isDeaf);
+            setCurrentCall(prev => prev ? {
+              ...prev,
+              callee: callee // Use the actual callee info from the receiver
+            } : null);
+          }
+          
           // Peer connection should already be created with tracks by initiateCall
           if (!peerConnectionRef.current) {
             console.warn('No peer connection on call-accept');
@@ -400,12 +616,17 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         }
 
         case 'call-reject': {
+          console.log('Call rejected by other party');
+          // Stop media tracks
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => {
+              console.log('Stopping track on call-reject:', track.kind);
+              track.stop();
+            });
+          }
           setCallState('idle');
           setCurrentCall(null);
-          if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            setLocalStream(null);
-          }
+          setLocalStream(null);
           break;
         }
 
@@ -458,8 +679,12 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         }
 
         case 'sign-translation': {
+          console.log('[Signaling] Received sign-translation message:', message);
           if (message.payload) {
-            setTranslationMessages(prev => [...prev, message.payload as TranslationMessage]);
+            // Messages from signaling should be marked as remote (isLocal: false)
+            const remoteMessage = { ...message.payload as TranslationMessage, isLocal: false };
+            console.log('[Signaling] Adding to translation messages with isLocal: false');
+            setTranslationMessages(prev => [...prev, remoteMessage]);
           }
           break;
         }
@@ -495,16 +720,17 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setCurrentCall(newCall);
     setCallState('calling');
 
+    let acquiredStream: MediaStream | null = null;
     try {
       await waitForWebSocketReady();
       
       // GET MEDIA AND CREATE PEER CONNECTION WITH TRACKS BEFORE SENDING ANY MESSAGE
       console.log('Requesting media...');
-      const stream = await getMediaStream(isCurrentUserDeaf);
-      setLocalStream(stream);
+      acquiredStream = await getMediaStream(isCurrentUserDeaf);
+      setLocalStream(acquiredStream);
       
       console.log('Creating peer connection with tracks...');
-      const pc = createPeerConnection(stream);
+      const pc = createPeerConnection(acquiredStream);
       peerConnectionRef.current = pc;
       
       // Now mark as connected (peer connection ready with tracks)
@@ -522,7 +748,14 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       });
     } catch (error) {
       console.error('Call initiation error:', error);
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      // Stop local stream tracks if we acquired the stream
+      if (acquiredStream) {
+        acquiredStream.getTracks().forEach(t => t.stop());
+      }
+      // Also try to stop from state in case partial stream was set
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+      }
       setCallState('idle');
       setCurrentCall(null);
       setLocalStream(null);
@@ -541,36 +774,52 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       state: 'connected'
     };
     
+    // Store incomingCall reference before clearing it
+    const acceptedCall = incomingCall;
+    
     setCurrentCall(newCall);
-    setIncomingCall(null);
     setCallState('connected');
 
+    let acquiredStream: MediaStream | null = null;
     try {
       await waitForWebSocketReady();
       
       // GET MEDIA AND CREATE PEER CONNECTION WITH TRACKS BEFORE SENDING ACCEPT
       console.log('Requesting media...');
-      const stream = await getMediaStream(isCurrentUserDeaf);
-      setLocalStream(stream);
+      acquiredStream = await getMediaStream(isCurrentUserDeaf);
+      setLocalStream(acquiredStream);
       
       console.log('Creating peer connection with tracks...');
-      const pc = createPeerConnection(stream);
+      const pc = createPeerConnection(acquiredStream);
       peerConnectionRef.current = pc;
       
-      // Notify caller
-      console.log('Sending call-accept');
-      sendSignalingMessage(incomingCall.caller.id, {
+      // Only clear incomingCall after successfully setting up the call
+      setIncomingCall(null);
+      
+      // Notify caller with callee's actual peer info
+      console.log('Sending call-accept with callee info');
+      sendSignalingMessage(acceptedCall.caller.id, {
         type: 'call-accept',
-        callId: incomingCall.id,
+        callId: acceptedCall.id,
         from: currentUserId,
-        to: incomingCall.caller.id
+        to: acceptedCall.caller.id,
+        payload: { callee: newCall.callee }
       });
     } catch (error) {
       console.error('Accept call failed:', error);
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      // Stop any acquired media tracks
+      if (acquiredStream) {
+        acquiredStream.getTracks().forEach(t => t.stop());
+      }
+      // Also try to stop from state in case partial stream was set
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      // On error, restore the incomingCall state so the modal can show again
+      setIncomingCall(acceptedCall);
       setCallState('incoming');
-      setLocalStream(null);
       setCurrentCall(null);
+      setLocalStream(null);
     }
   }, [incomingCall, currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream, createPeerConnection]);
 
@@ -584,20 +833,65 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       to: incomingCall.caller.id
     });
     
+    // Clean up any media if partially acquired
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+    
     setIncomingCall(null);
     setCallState('idle');
+    setLocalStream(null);
   }, [incomingCall, currentUserId]);
 
   const endCallInternal = useCallback(() => {
+    console.log('=== END CALL INTERNAL ===');
+    
     if (peerConnectionRef.current) {
+      console.log('Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
     
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+    // CRITICAL: Stop all media tracks - use refs directly, don't rely on state
+    // State changes may not reflect immediately due to React batching
+    const allTracks: MediaStreamTrack[] = [];
+    
+    // Get tracks from both state and ref
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        console.log('[ENDCALL] Stopping local track from ref:', track.kind, 'enabled:', track.enabled);
+        track.stop();
+        allTracks.push(track);
+      });
     }
     
+    // Also check the current state value, in case there's a timing difference
+    if (localStream && localStream !== localStreamRef.current) {
+      localStream.getTracks().forEach(track => {
+        if (!allTracks.includes(track)) {
+          console.log('[ENDCALL] Stopping local track from state:', track.kind);
+          track.stop();
+          allTracks.push(track);
+        }
+      });
+    }
+    
+    // Clean up remote stream
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => {
+        console.log('[ENDCALL] Stopping remote track:', track.kind);
+        track.stop();
+      });
+    }
+    
+    // Close data channel
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+    
+    // Update state
     setCallState('idle');
     setCurrentCall(null);
     setIncomingCall(null);
@@ -605,6 +899,8 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setRemoteStream(null);
     setTranslationMessages([]);
     setTranscriptMessages([]);
+    
+    console.log('=== END CALL INTERNAL COMPLETE - Stopped', allTracks.length, 'local tracks');
   }, [localStream]);
 
   const endCall = useCallback(() => {
@@ -624,26 +920,33 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     endCallInternal();
   }, [currentCall, currentUserId, endCallInternal]);
 
-  const sendTranslation = useCallback((text: string, shouldSpeak: boolean) => {
+  const sendTranslation = useCallback((text: string, shouldSpeak: boolean, voiceSettings?: any) => {
+    console.log('[sendTranslation] Called with text:', text, 'shouldSpeak:', shouldSpeak, 'voiceSettings:', voiceSettings);
     const message: TranslationMessage = {
       text,
       timestamp: Date.now(),
-      shouldSpeak
+      shouldSpeak,
+      voiceSettings
     };
+    console.log('[sendTranslation] Message object:', message);
+    
     const payload = JSON.stringify({
       type: 'sign-translation',
       message
     });
 
     if (dataChannelRef.current?.readyState === 'open') {
+      console.log('[sendTranslation] Data channel OPEN - sending directly');
       dataChannelRef.current.send(payload);
     } else {
+      console.log('[sendTranslation] Data channel NOT ready - using signaling, currentCall:', currentCall);
       pendingDataMessagesRef.current.push(payload);
 
       if (currentCall) {
         const otherUserId = currentCall.caller.id === currentUserId
           ? currentCall.callee.id
           : currentCall.caller.id;
+        console.log('[sendTranslation] Sending via signaling to:', otherUserId);
         sendSignalingMessage(otherUserId, {
           type: 'sign-translation',
           callId: currentCall.id,
@@ -651,11 +954,14 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
           to: otherUserId,
           payload: message
         });
+      } else {
+        console.log('[sendTranslation] WARNING - currentCall is null, message may not be sent!');
       }
     }
 
     // Also add to local state
-    setTranslationMessages(prev => [...prev, message]);
+    console.log('[sendTranslation] Adding to local state with isLocal: true');
+    setTranslationMessages(prev => [...prev, {...message, isLocal: true}]);
   }, [currentCall, currentUserId]);
 
   const sendTranscript = useCallback((text: string) => {

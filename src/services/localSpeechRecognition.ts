@@ -42,12 +42,12 @@ interface SpeechRecognitionErrorEvent extends Event {
 declare var SpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
-};
+} | undefined;
 
 declare var webkitSpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
-};
+} | undefined;
 
 // Check if Web Speech Recognition API is available
 const isSpeechRecognitionSupported = () => {
@@ -58,7 +58,7 @@ const isSpeechRecognitionSupported = () => {
 };
 
 // Get the SpeechRecognition constructor (works in Chrome/Edge)
-const getSpeechRecognition = (): typeof SpeechRecognition | null => {
+const getSpeechRecognition = (): any => {
   if ('SpeechRecognition' in window) {
     return (window as any).SpeechRecognition;
   }
@@ -107,16 +107,31 @@ export const startSpeechRecognition = (
       return;
     }
 
-    // Stop any existing recognition
-    if (recognitionInstance) {
+    // Aggressively stop any existing recognition
+    const oldInstance = recognitionInstance;
+    recognitionInstance = null; // Clear immediately so new instance isn't confused
+    
+    if (oldInstance) {
       try {
-        recognitionInstance.stop();
+        console.log('[Speech Recognition] Aborting old recognition instance');
+        (oldInstance as SpeechRecognition).abort();
       } catch (e) {
-        // Ignore errors when stopping
+        console.warn('[Speech Recognition] Error aborting old instance:', e);
       }
     }
 
-    const recognition = new SpeechRecognition();
+    // Double-check that we're creating a fresh instance
+    if (recognitionInstance !== null) {
+      console.warn('[Speech Recognition] WARNING: recognitionInstance still exists after clearing!');
+      try {
+        (recognitionInstance as SpeechRecognition).abort();
+        recognitionInstance = null;
+      } catch (e) {
+        recognitionInstance = null; // Force clear
+      }
+    }
+
+    const recognition = new SpeechRecognition() as SpeechRecognition;
     recognitionInstance = recognition;
 
     recognition.continuous = options.continuous ?? true;
@@ -124,6 +139,7 @@ export const startSpeechRecognition = (
     recognition.lang = options.lang ?? 'en-US';
 
     let finalTranscript = '';
+    let hasError = false;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interimTranscript = '';
@@ -146,20 +162,35 @@ export const startSpeechRecognition = (
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       const error = new Error(`Speech recognition error: ${event.error}`);
-      callbacks.onError?.(error);
       
-      // Don't reject on certain errors that are recoverable
-      if (event.error === 'no-speech' || event.error === 'audio-capture') {
+      // Don't treat certain errors as fatal
+      if (event.error === 'no-speech') {
+        console.warn('[Speech Recognition] No speech detected, will continue listening...');
         return;
       }
       
+      if (event.error === 'audio-capture') {
+        console.warn('[Speech Recognition] No audio input detected, will continue listening...');
+        return;
+      }
+      
+      // "aborted" is expected when we intentionally stop - not a real error
+      if (event.error === 'aborted') {
+        console.warn('[Speech Recognition] Recognition was aborted (expected when stopping)');
+        return;
+      }
+      
+      hasError = true;
+      callbacks.onError?.(error);
       reject(error);
     };
 
     recognition.onend = () => {
       recognitionInstance = null;
       callbacks.onEnd?.();
-      resolve();
+      if (!hasError) {
+        resolve();
+      }
     };
 
     try {
@@ -173,14 +204,24 @@ export const startSpeechRecognition = (
   });
 };
 
-export const stopSpeechRecognition = (): void => {
-  if (recognitionInstance) {
+export const stopSpeechRecognition = (aggressive: boolean = false): void => {
+  const instance = recognitionInstance;
+  recognitionInstance = null; // Clear immediately
+  
+  if (instance) {
     try {
-      recognitionInstance.stop();
+      if (aggressive) {
+        // Use abort for forced cleanup (when starting a new recognition)
+        console.log('[Speech Recognition] Stopping with abort (aggressive cleanup)');
+        instance.abort();
+      } else {
+        // Use stop for normal completion (user taking a break)
+        console.log('[Speech Recognition] Stopping with stop (normal)');
+        instance.stop();
+      }
     } catch (error) {
-      console.warn('Error stopping speech recognition:', error);
+      console.warn('[Speech Recognition] Error stopping recognition:', error);
     }
-    recognitionInstance = null;
   }
 };
 

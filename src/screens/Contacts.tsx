@@ -1,8 +1,9 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { validateCallEligibility } from '../services/useCallService';
 
 const Contacts = () => {
-  const { contacts, addContact, removeContact, user, initiateCall, callState, darkMode } = useAppContext();
+  const { contacts, addContact, removeContact, user, initiateCall, callState, updateContact } = useAppContext();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -22,36 +23,94 @@ const Contacts = () => {
     }
   };
 
-  const handleCallContact = async (contact: { id: string; username: string }) => {
+  const handleCallContact = async (contact: { id: string; username: string; isDeaf?: boolean }) => {
     if (callState !== 'idle') {
       setFeedback('You are already in a call. Please end the current call first.');
       return;
     }
     
+    if (!user?.id) {
+      setFeedback('User not logged in. Please log in first.');
+      return;
+    }
+    
     try {
-      // For demo purposes, we assume the contact is the opposite type
-      const isContactDeaf = !user?.isDeaf;
-      await initiateCall(contact.id, contact.username, isContactDeaf);
-      setFeedback('Call initiated successfully.');
+      setFeedback('🔍 Validating call eligibility from server...');
+      
+      console.log('[Contacts] === CALL VALIDATION START ===');
+      console.log('[Contacts] Caller (current user): ID=' + user.id + ', Username=' + user.username + ', IsDeaf=' + user.isDeaf);
+      console.log('[Contacts] Callee (contact): ID=' + contact.id + ', Username=' + contact.username + ', LocalIsDeaf=' + contact.isDeaf);
+      
+      // Query BOTH users' status from server (100% accurate)
+      let validationResult;
+      try {
+        validationResult = await validateCallEligibility(user.id, contact.id);
+      } catch (validateError) {
+        console.error('[Contacts] Validation query failed:', validateError);
+        throw validateError;
+      }
+      
+      const callerIsDeaf = validationResult.callerIsDeaf;
+      const calleeIsDeaf = validationResult.calleeIsDeaf;
+      
+      console.log('[Contacts] === SERVER RESPONSE ===');
+      console.log('[Contacts] Caller isDeaf type:', typeof callerIsDeaf, 'value:', callerIsDeaf);
+      console.log('[Contacts] Callee isDeaf type:', typeof calleeIsDeaf, 'value:', calleeIsDeaf);
+
+      // Update local contact type if it differs from server
+      if (contact.isDeaf !== calleeIsDeaf) {
+        console.log('[Contacts] Updating contact isDeaf from', contact.isDeaf, 'to', calleeIsDeaf);
+        updateContact(contact.id, calleeIsDeaf);
+      }
+
+      // Validate call rules (EXPLICIT CHECKS FOR SAFETY)
+      console.log('[Contacts] === VALIDATION CHECK ===');
+      console.log('[Contacts] Check: !callerIsDeaf =', !callerIsDeaf);
+      console.log('[Contacts] Check: !calleeIsDeaf =', !calleeIsDeaf);
+      console.log('[Contacts] Check: Both hearing? =', !callerIsDeaf && !calleeIsDeaf);
+      
+      // CRITICAL: Block if both are hearing
+      if (callerIsDeaf === false && calleeIsDeaf === false) {
+        console.warn('[Contacts] ❌ CALL BLOCKED: Both users are hearing (callerIsDeaf=false, calleeIsDeaf=false)');
+        setFeedback(`❌ Cannot call: Both users are hearing. At least one must be deaf/hard of hearing for translation. Please contact a deaf/hard of hearing user.`);
+        return;
+      }
+      
+      // Double-check: if callers types are unexpectedly undefined or null, reject for safety
+      if (typeof callerIsDeaf !== 'boolean' || typeof calleeIsDeaf !== 'boolean') {
+        console.error('[Contacts] ❌ Invalid types received from server!', { callerIsDeaf, calleeIsDeaf });
+        setFeedback(`❌ Error validating user types. Please try again.`);
+        return;
+      }
+      
+      // All validation passed - proceed with call
+      console.log('[Contacts] ✓ CALL VALIDATION PASSED');
+      console.log('[Contacts] Call allowed:', (callerIsDeaf ? 'Deaf' : 'Hearing'), '→', (calleeIsDeaf ? 'Deaf' : 'Hearing'));
+      await initiateCall(contact.id, contact.username, calleeIsDeaf);
+      setFeedback('✓ Call initiated successfully.');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
+      console.error('[Contacts] ❌ CALL VALIDATION FAILED:', { error: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+      
       if (errorMessage.includes('WebSocket')) {
-        setFeedback('Connection error: Signaling server unreachable. Make sure to run "npm run server" in a separate terminal.');
+        setFeedback('❌ Connection error: Signaling server unreachable. Make sure "npm run server" is running.');
       } else if (errorMessage.includes('MediaPermissionDenied')) {
-        setFeedback('❌ Camera/Microphone access denied.\n\n📋 FIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord using your camera\n4. RETRY: Try calling again');
+        setFeedback('❌ Camera/Microphone access denied.\n\nFIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord\n4. RETRY: Try calling again');
       } else if (errorMessage.includes('NoMediaDeviceFound')) {
-        setFeedback('❌ No camera or microphone found. Please connect a camera or microphone and retry.');
+        setFeedback('❌ No camera or microphone found. Please connect a camera/microphone and retry.');
       } else if (errorMessage.includes('MediaDeviceInUse')) {
-        setFeedback('❌ Your camera or microphone is being used by another app. Close it and retry.');
+        setFeedback('❌ Your camera/microphone is in use by another app. Close it and retry.');
       } else if (errorMessage.includes('SecurityError')) {
-        setFeedback('❌ Security issue: Try accessing via http://localhost:1420 or contact support.');
+        setFeedback('❌ Security issue: Try accessing via https://localhost:1420 or contact support.');
       } else if (errorMessage.includes('MediaDevices') || errorMessage.includes('getUserMedia')) {
-        setFeedback(`❌ Camera/Microphone error: ${errorMessage}`);
+        setFeedback(`❌ Media error: ${errorMessage}`);
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('User status query')) {
+        setFeedback(`⚠️ Server unavailable - cannot verify user types. Please check your connection and try again.`);
       } else {
-        setFeedback(`Failed to initiate call: ${errorMessage}`);
+        setFeedback(`❌ Call failed: ${errorMessage}`);
       }
-      console.error('Call initiation error:', error);
+      console.error('Call error:', error);
     }
   };
 
@@ -88,8 +147,9 @@ const Contacts = () => {
           </form>
           {feedback && (
             <div className={`mt-4 rounded-lg p-3 text-sm ${
-              feedback.includes('successfully') ? 'bg-green-500/20' : 'bg-blue-500/20'
-            } ${darkMode ? 'text-white' : 'text-black'}`}>
+              feedback.includes('❌') ? 'bg-red-500/20 text-red-200' :
+              feedback.includes('successfully') ? 'bg-green-500/20 text-green-200' : 'bg-blue-500/20 text-blue-200'
+            }`}>
               {feedback}
             </div>
           )}
@@ -140,6 +200,7 @@ const Contacts = () => {
           ))
         )}
       </section>
+
     </div>
   );
 };

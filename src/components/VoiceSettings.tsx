@@ -26,14 +26,20 @@ const VoiceSettings = ({
   useEffect(() => {
     const loadVoices = () => {
       const availableVoices = window.speechSynthesis.getVoices();
+      console.log('[VoiceSettings] Voices loaded, count:', availableVoices.length);
+      console.log('[VoiceSettings] Available voices:', availableVoices.map((v, i) => `${i}: ${v.name} (${v.lang})`));
+      
       if (availableVoices.length > 0) {
         setVoices(availableVoices);
         if (!selectedVoice) {
           const defaultVoice = availableVoices.find(v => v.default) || availableVoices[0];
           if (defaultVoice) {
+            console.log('[VoiceSettings] Setting default voice:', defaultVoice.name);
             setSelectedVoice(defaultVoice.name);
             onVoiceChange(defaultVoice);
           }
+        } else {
+          console.log('[VoiceSettings] Selected voice already set:', selectedVoice);
         }
       }
     };
@@ -76,10 +82,15 @@ const VoiceSettings = ({
           <select
             value={selectedVoice}
             onChange={(e) => {
+              console.log('[VoiceSettings] User selected voice:', e.target.value);
               const voice = voices.find(v => v.name === e.target.value);
               if (voice) {
+                console.log('[VoiceSettings] Found voice object:', voice.name, '(' + voice.lang + ')');
                 setSelectedVoice(voice.name);
+                console.log('[VoiceSettings] Calling onVoiceChange with:', voice.name);
                 onVoiceChange(voice);
+              } else {
+                console.warn('[VoiceSettings] Voice not found in array!');
               }
             }}
             className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
