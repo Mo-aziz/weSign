@@ -86,8 +86,8 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 - Call timer showing elapsed time
 - Bidirectional media streams (camera for deaf, microphone for hearing)
 - **Call Eligibility Validation**: Intelligent call blocking system that validates both caller and callee user types at call time:
-  - ✅ **Allowed**: Deaf → Deaf, Deaf → Hearing, Hearing → Deaf
-  - ❌ **Blocked**: Hearing → Hearing (prevents inappropriate calls)
+  - **Allowed**: Deaf → Deaf, Deaf → Hearing, Hearing → Deaf
+  - **Blocked**: Hearing → Hearing (prevents inappropriate calls)
   - Real-time server validation ensures accurate user type detection
   - User type changes in Settings immediately sync to server
 
@@ -113,10 +113,10 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 - **Parallel Server Queries**: Both caller and callee user types are fetched simultaneously for accuracy
 - **User Type Synchronization**: When users change their type in Settings, changes are immediately sent to server and reflected in all call validations
 - **Intelligent Blocking Rules**:
-  - ✅ Deaf → Deaf: Uses video/sign recognition channel
-  - ✅ Deaf → Hearing: Deaf user signs, hearing user hears captions + TTS
-  - ✅ Hearing → Deaf: Hearing user speaks, deaf user sees captions + sign simulation
-  - ❌ Hearing → Hearing: **Blocked** - system prevents inappropriate same-mode calls
+  -  Deaf → Deaf: Uses video/sign recognition channel
+  -  Deaf → Hearing: Deaf user signs, hearing user hears captions + TTS
+  -  Hearing → Deaf: Hearing user speaks, deaf user sees captions + sign simulation
+  -  Hearing → Hearing: **Blocked** - system prevents inappropriate same-mode calls
 - **Error Messaging**: Clear user feedback when calls are blocked with reason explanation
 
 ### User Interface
@@ -257,7 +257,7 @@ Should complete without errors. If you see errors, check TypeScript types and im
 
 ## Running the Application
 
-### ⚠️ Important: HTTPS & Certificates
+###  Important: HTTPS & Certificates
 
 The app uses **HTTPS with self-signed certificates** (via mkcert) for security:
 - Dev server: `https://localhost:1420`
