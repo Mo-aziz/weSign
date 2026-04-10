@@ -316,6 +316,103 @@ Signaling server running on wss://localhost:3001
 - Relays translation messages between connected users
 - Uses WSS (WebSocket Secure) for encrypted signaling
 
+### Network Configuration: Testing on Different Devices
+
+To test the app across multiple devices on the **same network** (e.g., multiple computers on home/office Wi-Fi):
+
+#### Step 1: Get Your Network IP
+
+Find your computer's local network IP address:
+
+**On Windows:**
+```bash
+ipconfig
+```
+Look for "IPv4 Address" under your active network (typically `192.168.x.x` or `10.x.x.x`)
+
+**Example:** `192.168.100.80`
+
+#### Step 2: Set Environment Variable
+
+Before running the app, set the `VITE_NETWORK_IP` environment variable:
+
+**Windows PowerShell:**
+```powershell
+$env:VITE_NETWORK_IP = "192.168.100.80"
+npm run tauri:dev
+```
+
+**Windows CMD:**
+```cmd
+set VITE_NETWORK_IP=192.168.100.80
+npm run tauri:dev
+```
+
+**Alternative: Persistent (add to system environment):**
+- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.100.80`
+- Then restart terminals and re-run app
+
+#### Step 3: Access on Other Devices
+
+On any device connected to the same network, open your browser:
+```
+https://192.168.100.80:1420
+```
+
+**Note:** You'll see a certificate warning (expected with self-signed certs) - click "Advanced" and proceed.
+
+#### Step 4: Start Signaling Server
+
+In a **separate terminal** on the host machine:
+```bash
+npm run server
+```
+
+**Output:**
+```
+Signaling server running on wss://192.168.100.80:3001
+```
+
+#### Step 5: Test Multi-Device Calls
+
+**Device A (User 1):**
+1. Login with any credentials
+2. Select "Deaf" or "Hearing" preference
+3. Add contact from Device B
+
+**Device B (User 2):**
+1. Login with different credentials
+2. Select opposite preference (if User 1 is Deaf, select Hearing)
+3. Add contact from Device A
+
+**Initiate Call:**
+- User A calls User B
+- User B accepts
+- Both see real-time video/sign/speech streams
+- Communication works bidirectionally
+
+#### Troubleshooting Network Issues
+
+**Problem:** Can't reach `https://192.168.100.80:1420`
+- Solution 1: Verify IP is correct (`ipconfig`)
+- Solution 2: Check firewall isn't blocking ports 1420 & 3001
+- Solution 3: Ensure both devices are on same Wi-Fi network
+- Solution 4: Restart the dev server after setting env variable
+
+**Problem:** Connection drops or keeps reconnecting
+- Solution: Check signaling server is running (`npm run server`)
+- Solution: Verify signaling server is using correct network IP (should log on startup)
+
+**Problem:** Can see other user but no audio/video
+- Solution: Check browser permissions (camera/microphone)
+- Solution: Verify WebRTC ICE candidates can traverse network
+- Solution: Try running on same machine first (localhost) to isolate network vs app issues
+
+**Environment Variable Fallback:**
+- If `VITE_NETWORK_IP` is NOT set: App defaults to `localhost` (single device only)
+- If `VITE_NETWORK_IP` is set but empty: App defaults to `localhost`
+- If `VITE_NETWORK_IP` is set to valid IP: App uses that IP for network-wide access
+
 ---
 
 ## Testing the Application
