@@ -330,7 +330,7 @@ ipconfig
 ```
 Look for "IPv4 Address" under your active network (typically `192.168.x.x` or `10.x.x.x`)
 
-**Example:** `192.168.100.80` (replace with YOUR actual IP)
+**Example:** `192.168.0.0` (replace with YOUR actual IP)
 
 #### Step 2: Set Environment Variable
 
@@ -338,25 +338,25 @@ Before running the app, set the `VITE_NETWORK_IP` environment variable:
 
 **Windows PowerShell:**
 ```powershell
-$env:VITE_NETWORK_IP = "192.168.100.80"  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
+$env:VITE_NETWORK_IP = "192.168.0.0"  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
 npm run tauri:dev
 ```
 
 **Windows CMD:**
 ```cmd
-set VITE_NETWORK_IP=192.168.100.80  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
+set VITE_NETWORK_IP=192.168.0.0  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
 npm run tauri:dev
 ```
 
 **Alternative: Persistent (add to system environment):**
-- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.100.80` (⚠️ YOUR IP)
+- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.0.0` (⚠️ YOUR IP)
 - Then restart terminals and re-run app
 
 #### Step 3: Access on Other Devices
 
 On any device connected to the same network, open your browser:
 ```
-https://192.168.100.80:1420  # ⚠️ Replace 192.168.100.80 with YOUR actual IP
+https://192.168.0.0:1420  # ⚠️ Replace 192.168.0.0 with YOUR actual IP
 ```
 
 **Note:** You'll see a certificate warning (expected with self-signed certs) - click "Advanced" and proceed.
@@ -393,7 +393,7 @@ Signaling server running on wss://192.168.100.80:3001
 
 #### Troubleshooting Network Issues
 
-**Problem:** Can't reach `https://192.168.100.80:1420` (or YOUR_IP:1420)
+**Problem:** Can't reach `https://192.168.0.0:1420` (or YOUR_IP:1420)
 - Solution 1: Verify IP is correct by running `ipconfig` and finding your IPv4 Address
 - Solution 2: Check firewall isn't blocking ports 1420 & 3001
 - Solution 3: Ensure both devices are on same Wi-Fi network
