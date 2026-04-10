@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  /* TailwindCSS @apply directives are transformed at build-time via PostCSS */
+  @apply bg-slate-100 text-slate-900 antialiased transition-colors duration-300 overflow-x-hidden;
+  @apply dark:bg-slate-950 dark:text-slate-100;
+}
+
+a {
+  @apply text-brand-600 hover:text-brand-500 transition-colors;
+  @apply dark:text-brand-500 dark:hover:text-brand-400;
+}
+
+.card-surface {
+  @apply bg-white/80 border border-slate-200 rounded-3xl shadow-lg backdrop-blur-lg;
+  @apply dark:bg-slate-900/80 dark:border-slate-800 dark:shadow-glow;
+}
+
+.input-field {
+  @apply w-full rounded-2xl border border-slate-300 bg-white/80 px-4 py-3 text-slate-900 placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/20;
+  @apply dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:ring-brand-500/30;
+}
+
+.mobile-nav {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mobile-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* Light theme text overrides requested by user */
+html:not(.dark) .text-white {
+  color: #6d28d9 !important;
+}
+
+/* Keep contrast on purple brand surfaces */
+html:not(.dark) [class*='bg-brand-'] .text-white,
+html:not(.dark) [class*='bg-brand-'][class*='text-white'] {
+  color: #fff !important;
+}
+
+html:not(.dark) [class*='text-slate-'],
+html:not(.dark) [class*='text-gray-'] {
+  color: #000 !important;
+}
+
+/* Light mode surface cleanup: replace dark box backgrounds/borders */
+html:not(.dark) [class*='bg-slate-950'],
+html:not(.dark) [class*='bg-slate-900'] {
+  background-color: #ffffff !important;
+}
+
+html:not(.dark) [class*='bg-slate-800'] {
+  background-color: #f8fafc !important;
+}
+
+html:not(.dark) [class*='bg-slate-700'] {
+  background-color: #f1f5f9 !important;
+}
+
+html:not(.dark) [class*='border-slate-900'],
+html:not(.dark) [class*='border-slate-800'],
+html:not(.dark) [class*='border-slate-700'] {
+  border-color: #e2e8f0 !important;
+}
