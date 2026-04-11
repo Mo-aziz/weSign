@@ -1,8 +1,12 @@
 ﻿# Tauri
 src-tauri/target/
+Frontend/src-tauri/target/
 src-tauri/**/*.pdb
 src-tauri/**/*.rlib
 src-tauri/**/*.rmeta
+Frontend/src-tauri/**/*.pdb
+Frontend/src-tauri/**/*.rlib
+Frontend/src-tauri/**/*.rmeta
 
 # Node
 node_modules/
