@@ -130,10 +130,14 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// Get network IP from environment or use localhost
+const networkIP = process.env.VITE_NETWORK_IP || 'localhost';
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✓ Signaling server running on WSS port ${PORT}`);
-  console.log(`✓ Both HTTP and WSS available (WSS for remote clients)`);
-  console.log(`✓ Access via: wss://192.168.100.80:${PORT}/\n`);
+  console.log(`✓ Local access: wss://localhost:${PORT}/`);
+  console.log(`✓ Network access: wss://${networkIP}:${PORT}/\n`);
+  console.log(`📌 Set VITE_NETWORK_IP environment variable to access from other devices\n`);
 });
 
 // Handle graceful shutdown

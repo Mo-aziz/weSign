@@ -72,8 +72,9 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-// Use localhost by default so it works in browser and embedded runtimes.
-const WS_URL = import.meta.env.VITE_SIGNALING_URL ?? 'ws://localhost:3001';
+// Uses VITE_NETWORK_IP for network access, falls back to localhost for single device
+const signalingHost = import.meta.env.VITE_NETWORK_IP || 'localhost';
+const WS_URL = import.meta.env.VITE_SIGNALING_URL ?? `wss://${signalingHost}:3001`;
 
 let ws: WebSocket | null = null;
 let messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();
