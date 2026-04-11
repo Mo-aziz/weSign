@@ -164,42 +164,50 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 
 ```
 sign-language-react-v2/
-├── src/                                  # React frontend source
-│   ├── context/
-│   │   └── AppContext.tsx                # Global state management (user, calls, theme)
-│   ├── screens/
-│   │   ├── Login.tsx                     # User authentication
-│   │   ├── Contacts.tsx                  # Contact list & call initiation
-│   │   ├── Translation.tsx               # Sign/speech practice & preview
-│   │   └── Settings.tsx                  # User profile & preferences
-│   ├── components/
-│   │   ├── CallModal.tsx                 # In-call UI & communication
-│   │   ├── IncomingCallModal.tsx         # Incoming call notification
-│   │   ├── AuthenticatedLayout.tsx       # Navigation layout
-│   │   └── VoiceSettings.tsx             # Voice configuration UI
-│   ├── services/
-│   │   ├── useCallService.ts             # WebRTC peer connection & signaling
-│   │   ├── useSignRecognitionService.ts  # Sign recognition (simulated)
-│   │   ├── localSpeechRecognition.ts     # Web Speech API wrapper
-│   │   └── localTTS.ts                   # Text-to-speech (Web Speech API)
-│   ├── theme/
-│   │   └── materialTheme.ts              # Theme configuration
-│   ├── App.tsx                           # Root component & routing
-│   ├── main.tsx                          # React app entry point
-│   └── index.css                         # Global styles
-│
-├── src-tauri/                            # Tauri desktop app backend
-│   ├── tauri.conf.json                   # Tauri configuration
-│   ├── Cargo.toml                        # Rust dependencies
-│   ├── src/main.rs                       # Tauri app initialization
-│   └── tts_service/                      # Python TTS service (optional)
+├── Frontend/                             # All frontend code and build config
+│   ├── src/                              # React frontend source
+│   │   ├── context/
+│   │   │   └── AppContext.tsx            # Global state management (user, calls, theme)
+│   │   ├── screens/
+│   │   │   ├── Login.tsx                 # User authentication
+│   │   │   ├── Contacts.tsx              # Contact list & call initiation
+│   │   │   ├── Translation.tsx           # Sign/speech practice & preview
+│   │   │   └── Settings.tsx              # User profile & preferences
+│   │   ├── components/
+│   │   │   ├── CallModal.tsx             # In-call UI & communication
+│   │   │   ├── IncomingCallModal.tsx     # Incoming call notification
+│   │   │   ├── AuthenticatedLayout.tsx   # Navigation layout
+│   │   │   └── VoiceSettings.tsx         # Voice configuration UI
+│   │   ├── services/
+│   │   │   ├── useCallService.ts         # WebRTC peer connection & signaling
+│   │   │   ├── useSignRecognitionService.ts  # Sign recognition
+│   │   │   ├── usePersistentMic.ts       # Microphone auto-control
+│   │   │   ├── localSpeechRecognition.ts # Web Speech API wrapper
+│   │   │   ├── localTTS.ts               # Text-to-speech (Web Speech API)
+│   │   │   └── voiceUtils.ts             # Voice matching & gender detection
+│   │   ├── theme/
+│   │   │   └── materialTheme.ts          # Theme configuration
+│   │   ├── App.tsx                       # Root component & routing
+│   │   ├── main.tsx                      # React app entry point
+│   │   └── index.css                     # Global styles
+│   │
+│   ├── src-tauri/                        # Tauri desktop app backend
+│   │   ├── tauri.conf.json               # Tauri configuration
+│   │   ├── Cargo.toml                    # Rust dependencies
+│   │   ├── src/main.rs                   # Tauri app initialization
+│   │   └── tts_service/                  # Python TTS service (optional)
+│   │
+│   ├── package.json                      # Npm dependencies & scripts
+│   ├── vite.config.ts                    # Vite build configuration
+│   ├── tailwind.config.js                # TailwindCSS config
+│   ├── tsconfig.json                     # TypeScript configuration
+│   └── eslint.config.js                  # ESLint configuration
 │
 ├── signaling-server.js                   # WebSocket signaling server
-├── package.json                          # Npm dependencies & scripts
-├── tauri.conf.json                       # Desktop app config
-├── vite.config.ts                        # Vite build configuration
-├── tailwind.config.js                    # TailwindCSS config
-└── tsconfig.json                         # TypeScript configuration
+├── .gitignore                            # Git ignore rules (includes build artifacts)
+├── generate-certs.js                     # HTTPS certificate generator
+├── cert-generator.js                     # Certificate generation helper
+└── README.md                             # This file
 ```
 
 ---
@@ -338,25 +346,25 @@ Before running the app, set the `VITE_NETWORK_IP` environment variable:
 
 **Windows PowerShell:**
 ```powershell
-$env:VITE_NETWORK_IP = "192.168.0.0"  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
+$env:VITE_NETWORK_IP = "192.168.0.0"  #  CHANGE TO YOUR IP (find with: ipconfig)
 npm run tauri:dev
 ```
 
 **Windows CMD:**
 ```cmd
-set VITE_NETWORK_IP=192.168.0.0  # ⚠️ CHANGE TO YOUR IP (find with: ipconfig)
+set VITE_NETWORK_IP=192.168.0.0  #  CHANGE TO YOUR IP (find with: ipconfig)
 npm run tauri:dev
 ```
 
 **Alternative: Persistent (add to system environment):**
-- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.0.0` (⚠️ YOUR IP)
+- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.0.0` ( YOUR IP)
 - Then restart terminals and re-run app
 
 #### Step 3: Access on Other Devices
 
 On any device connected to the same network, open your browser:
 ```
-https://192.168.0.0:1420  # ⚠️ Replace 192.168.0.0 with YOUR actual IP
+https://192.168.0.0:1420  #  Replace 192.168.0.0 with YOUR actual IP
 ```
 
 **Note:** You'll see a certificate warning (expected with self-signed certs) - click "Advanced" and proceed.
