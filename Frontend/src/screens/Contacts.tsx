@@ -1,10 +1,31 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 
 const Contacts = () => {
   const { contacts, addContact, removeContact, user, initiateCall, callState, darkMode } = useAppContext();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('info');
+
+  // Listen for call-blocked events from the signaling service
+  useEffect(() => {
+    const handleCallBlocked = (event: Event) => {
+      const customEvent = event as unknown as Record<string, unknown>;
+      const detail = customEvent.detail as Record<string, unknown>;
+      if (detail && detail.type === 'call-blocked') {
+        setFeedback((detail.reason || 'Call blocked') as string);
+        setFeedbackType('error');
+        // Auto-dismiss after 3 seconds
+        const timer = setTimeout(() => {
+          setFeedback(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+    };
+
+    window.addEventListener('callMessage', handleCallBlocked);
+    return () => window.removeEventListener('callMessage', handleCallBlocked);
+  }, []);
 
   const sortedContacts = useMemo(
     () => [...contacts].sort((a, b) => a.username.localeCompare(b.username)),
@@ -32,14 +53,25 @@ const Contacts = () => {
       // For demo purposes, we assume the contact is the opposite type
       const isContactDeaf = !user?.isDeaf;
       await initiateCall(contact.id, contact.username, isContactDeaf);
+      // Note: If call is blocked, the error will show via callMessage event listener
+      // Only show success if we get here without errors
       setFeedback('Call initiated successfully.');
+      setFeedbackType('success');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Skip showing feedback for call-blocked errors - they show via event listener
+      if (errorMessage.includes('call-blocked')) {
+        console.log('Call blocked - error shown via event listener');
+        // Don't set feedback - let the event listener handle it
+        setFeedbackType('error');
+        return;
+      }
       
       if (errorMessage.includes('WebSocket')) {
         setFeedback('Connection error: Signaling server unreachable. Make sure to run "npm run server" in a separate terminal.');
       } else if (errorMessage.includes('MediaPermissionDenied')) {
-        setFeedback('❌ Camera/Microphone access denied.\n\n📋 FIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord using your camera\n4. RETRY: Try calling again');
+        setFeedback('❌ Camera/Microphone access denied.\n\n FIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord using your camera\n4. RETRY: Try calling again');
       } else if (errorMessage.includes('NoMediaDeviceFound')) {
         setFeedback('❌ No camera or microphone found. Please connect a camera or microphone and retry.');
       } else if (errorMessage.includes('MediaDeviceInUse')) {
@@ -51,6 +83,7 @@ const Contacts = () => {
       } else {
         setFeedback(`Failed to initiate call: ${errorMessage}`);
       }
+      setFeedbackType('error');
       console.error('Call initiation error:', error);
     }
   };
@@ -88,8 +121,10 @@ const Contacts = () => {
           </form>
           {feedback && (
             <div className={`mt-4 rounded-lg p-3 text-sm ${
-              feedback.includes('successfully') ? 'bg-green-500/20' : 'bg-blue-500/20'
-            } ${darkMode ? 'text-white' : 'text-black'}`}>
+              feedbackType === 'success' ? 'bg-green-500/20 text-green-100' : 
+              feedbackType === 'error' ? 'bg-red-500/30 text-red-100 border border-red-500/50' : 
+              'bg-blue-500/20'
+            } ${darkMode ? '' : 'text-black'}`}>
               {feedback}
             </div>
           )}

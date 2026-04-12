@@ -212,68 +212,295 @@ sign-language-react-v2/
 
 ---
 
-## Prerequisites
+## Prerequisites & System Requirements
 
-Before you begin, ensure you have installed:
+### BEFORE YOU CLONE - Check Your System
 
-### Required
-- **Node.js** 18+ ([Download](https://nodejs.org))
-- **Rust toolchain** (required for Tauri on Windows)
+Before cloning the repository, ensure your system meets these requirements:
 
-### Windows-Specific Requirements
-For Tauri to compile on Windows, you need:
+#### Required Software
+- **Git** ([Download](https://git-scm.com/)) - For cloning the repository
+- **Node.js** 18+ ([Download](https://nodejs.org)) - For npm and running scripts
+- **Rust toolchain** ([Download](https://rustup.rs/)) - For Tauri compilation
 
-1. **Microsoft Visual C++ Build Tools** ([Download](https://visualstudio.microsoft.com/downloads/))
-   - When installing, select "Desktop development with C++" workload
+#### Windows-Specific Requirements
+For Tauri desktop compilation on Windows, you MUST install:
 
-2. **x86_64-pc-windows-msvc** Rust target (install with):
-   ```bash
+1. **Microsoft Visual C++ Build Tools**
+   - [Download Visual Studio Installer](https://visualstudio.microsoft.com/downloads/)
+   - Choose **Visual Studio Build Tools** or **Visual Studio Community** (free)
+   - When installing, select the **"Desktop development with C++"** workload
+   - Accept all required components
+   - *Installation Time:* ~30 minutes
+
+2. **x86_64-pc-windows-msvc Rust Target**
+   - After installing Rust, run in PowerShell (Admin):
+   ```powershell
    rustup target add x86_64-pc-windows-msvc
    ```
 
-### Verify Installation
-```bash
-node --version      # Should be v18+
-npm --version       # Should be 9+
-rustc --version     # Should be installed
-cargo --version     # Should be installed
+#### Optional but Recommended
+- **OpenSSL** ([Download](https://slproweb.com/products/Win32OpenSSL.html)) - For certificate generation
+  - Install "Light" version (64-bit recommended)
+  - Add to PATH during installation
+
+### Verify Prerequisites
+
+Run these commands to verify everything is installed:
+
+```powershell
+# Check Git
+git --version       # Should be git version 2.x or higher
+
+# Check Node.js and npm
+node --version      # Should be v18 or higher
+npm --version       # Should be 9 or higher
+
+# Check Rust
+rustc --version     # Should show version and date
+cargo --version     # Should show version and date
+
+# Verify Windows MSVC target
+rustup target list | Select-String "x86_64-pc-windows-msvc"
+# Should show: x86_64-pc-windows-msvc (installed)
 ```
+
+**If any command fails:** Install the missing component from links above before proceeding.
 
 ---
 
 ## Installation & Setup
 
 ### Step 1: Clone the Repository
-```bash
+
+```powershell
+# Clone the repository
 git clone https://github.com/Mo-aziz/weSign.git
-cd "sign language react V2"
+
+# Navigate to project directory
+cd wesign
+
+# Navigate to Frontend folder (all npm commands run from here)
+cd Frontend
 ```
 
-### Step 2: Install Dependencies
-```bash
+**Expected Result:** You should see the following directories:
+```
+Frontend/
+├── src/
+├── src-tauri/
+├── public/
+├── package.json
+├── vite.config.ts
+└── (other config files)
+```
+
+### Step 2: Install NPM Dependencies
+
+```powershell
+# From the Frontend directory
 npm install
 ```
-This installs all Node.js and React packages listed in `package.json`.
 
-### Step 3: Verify Setup
-```bash
+**What this does:**
+- Downloads ~22 npm packages (React, Vite, Tauri, etc.)
+- Creates `node_modules/` directory (~1+ GB)
+- Sets up build tools and dev dependencies
+
+**Installation Time:** 3-5 minutes (depends on internet speed)
+
+**Expected Output:**
+```
+added 1,234 packages in 4m
+```
+
+### Step 3: Generate HTTPS Certificates (CRITICAL)
+
+** IMPORTANT:** The app requires HTTPS certificates before it can run. You must generate them:
+
+#### Option A: Using Node.js (Recommended - No External Tools Needed)
+
+```powershell
+# From the Frontend directory
+node scripts/generate-certs.js
+```
+
+**Expected Output:**
+```
+✓ Generating self-signed certificates...
+✓ Certificates generated successfully
+✓ Certificates saved to: ./certs/
+  - key.pem
+  - cert.pem
+```
+
+**Files Created:**
+```
+Frontend/certs/
+├── key.pem      # Private key (keep secure)
+└── cert.pem     # Certificate
+```
+
+#### Option B: Using OpenSSL (If Node.js Certificate Generation Fails)
+
+If Option A fails, use OpenSSL (must be installed):
+
+```powershell
+# Create certs directory if it doesn't exist
+if (!(Test-Path "./certs")) { mkdir "./certs" }
+
+# Generate certificate with OpenSSL
+openssl req -x509 -newkey rsa:2048 -keyout ./certs/key.pem -out ./certs/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Dev/CN=localhost"
+```
+
+**Expected Output:**
+```
+Generating a 2048 bit RSA private key..........+++++
+........+++++
+writing new private key to './certs/key.pem'
+-----
+```
+
+#### Verify Certificates Were Generated
+
+```powershell
+# List certificate files
+Get-ChildItem ./certs/
+
+# Both files should exist:
+# - cert.pem (2-3 KB)
+# - key.pem (1-2 KB)
+```
+
+**If certificates are missing:**
+```
+Error: HTTPS certificates not found!
+Expected: ./certs/key.pem
+Expected: ./certs/cert.pem
+```
+
+Run the generation command again or troubleshoot OpenSSL installation.
+
+### Step 4: Verify Installation
+
+```powershell
+# From the Frontend directory
 npm run lint
 ```
-Should complete without errors. If you see errors, check TypeScript types and imports.
+
+**Expected Output:**
+```
+✓ No linting errors found
+```
+
+**If you see errors:**
+- Check TypeScript types: `npx tsc --noEmit`
+- Review error messages for syntax issues
+- Ensure all files were extracted correctly during clone
+
+---
+
+## Post-Clone Setup Verification
+
+After completing the Installation & Setup steps, verify everything was installed correctly:
+
+### Verify Your Setup
+
+Run this checklist to ensure everything is ready:
+
+```powershell
+# From the Frontend directory, run each command:
+
+# 1.  Verify Node.js packages installed
+Test-Path "./node_modules" -PathType Container
+# Should return: True
+
+# 2. Verify certificates exist
+Test-Path "./certs/key.pem"
+Test-Path "./certs/cert.pem"
+# Both should return: True
+
+# 3. Verify TypeScript configuration
+npx tsc --noEmit
+# Should complete with no errors
+
+# 4. Verify ESLint & code quality
+npm run lint
+# Should show "No linting errors found"
+
+# 5. Verify Tauri CLI is available
+npx tauri --version
+# Should show: tauri-cli X.X.X
+
+# 6. Verify Rust toolchain
+rustc --version && cargo --version
+# Should both show versions
+```
+
+**If all commands pass:** You're ready to run the app!
+
+**If any command fails:** 
+1. Refer to the " First-Time Clone Setup Issues" section in [Troubleshooting](#troubleshooting)
+2. Follow the solution for that specific issue
+3. Rerun the verification command
+
+### What Should Exist
+
+After successful setup, your `Frontend/` directory should contain:
+
+```
+Frontend/
+├── node_modules/          # Should exist (~1+ GB)
+├── certs/
+│   ├── key.pem           # Should exist (↓1 KB)
+│   └── cert.pem          # Should exist (↓3 KB)
+├── dist/                 # Will be created on build
+├── src/
+├── src-tauri/
+├── package.json
+├── package-lock.json    # Should exist
+├── tsconfig.json
+├── vite.config.ts
+└── scripts/
+    └── generate-certs.js
+```
+
+**Missing Files**: If you don't see `node_modules/` or `certs/`, rerun:
+- `npm install` for missing node_modules
+- `node scripts/generate-certs.js` for missing certificates
 
 ---
 
 ## Running the Application
 
-###  Important: HTTPS & Certificates
+### IMPORTANT: HTTPS & Certificate Requirements
 
-The app uses **HTTPS with self-signed certificates** (via mkcert) for security:
-- Dev server: `https://localhost:1420`
-- Signaling server: `wss://localhost:3001`
+The app uses **HTTPS with self-signed certificates** for security:
+- **Dev Server:** `https://localhost:1420`
+- **Signaling Server:** `wss://localhost:3001`
+- **Tauri Window:** Must use HTTPS for camera/microphone access
 
-On first launch, your browser may show a security warning. This is **normal and expected**. Simply click "Advanced" and proceed - the certificate is safe for development.
+**On first launch, your browser may show a security warning.** This is **normal and expected** with self-signed certificates in development:
+- **Chrome/Edge:** Click "Advanced" → "Proceed to localhost (unsafe)"
+- **Firefox:** Click "Accept Risk and Continue"
+- **Safari:** Click "Show Details" → "Visit this Website"
 
-**Note:** Camera/Microphone access requires HTTPS in modern browsers.
+The certificate is **safe for local development** - it's only untrusted because it's self-signed, not because it's malicious.
+
+**Why HTTPS is Required:**
+- Camera/Microphone access requires HTTPS in modern browsers
+- WebRTC peer connections need secure context
+- Stores sensitive user data securely
+- Prevents man-in-the-middle attacks on local network
+
+**Troubleshooting Certificate Issues:**
+
+| Problem | Solution |
+|---------|----------|
+| "Certificate not found" error | Run `node scripts/generate-certs.js` from Frontend directory |
+| Browser won't accept certificate | This is normal for self-signed certs - click "Advanced" and proceed |
+| "Cannot access media" error | Check HTTPS is enabled - browser requires HTTPS for camera/mic |
+| Certificate expired after 365 days | Regenerate with `node scripts/generate-certs.js` |
 
 ### Option 1: Desktop App (Recommended)
 Runs the full Tauri desktop application with both frontend (Vite) and native window:
@@ -338,27 +565,30 @@ ipconfig
 ```
 Look for "IPv4 Address" under your active network (typically `192.168.x.x` or `10.x.x.x`)
 
-**Example:** `192.168.0.0` (replace with YOUR actual IP)
+#### Step 2: Configure Your Network IP
 
-#### Step 2: Set Environment Variable
+Edit the IP address in the configuration files:
 
-Before running the app, set the `VITE_NETWORK_IP` environment variable:
-
-**Windows PowerShell:**
-```powershell
-$env:VITE_NETWORK_IP = "192.168.0.0"  #  CHANGE TO YOUR IP (find with: ipconfig)
-npm run tauri:dev
+**File 1: `src-tauri/tauri.conf.json`** (Line 41)
+```json
+"devPath": "https://192.168.X.X:1420"  // Change 192.168.X.X to YOUR IP
 ```
 
-**Windows CMD:**
-```cmd
-set VITE_NETWORK_IP=192.168.0.0  #  CHANGE TO YOUR IP (find with: ipconfig)
-npm run tauri:dev
+**File 2: `Frontend/vite.config.ts`** (Line 26)
+```typescript
+hmr: {
+  host: '192.168.X.X',  // Change 192.168.X.X to YOUR IP
+  port: 1420,
+  protocol: 'https',
+}
 ```
 
-**Alternative: Persistent (add to system environment):**
-- Windows: System Properties → Environment Variables → Add `VITE_NETWORK_IP=192.168.0.0` ( YOUR IP)
-- Then restart terminals and re-run app
+**File 3: `Frontend/src/services/useCallService.ts`** (Line 82)
+```typescript
+const WS_URL = `wss://192.168.X.X:3001`;  // Change 192.168.X.X to YOUR IP
+```
+
+**Example:** If your network IP is `192.168.1.50`, update all three files to use `192.168.1.50` instead of `192.168.X.X`
 
 #### Step 3: Access on Other Devices
 
@@ -378,7 +608,7 @@ npm run server
 
 **Output:**
 ```
-Signaling server running on wss://192.168.100.80:3001
+Signaling server running on wss://192.168.X.X:3001
 ```
 
 #### Step 5: Test Multi-Device Calls
@@ -405,7 +635,7 @@ Signaling server running on wss://192.168.100.80:3001
 - Solution 1: Verify IP is correct by running `ipconfig` and finding your IPv4 Address
 - Solution 2: Check firewall isn't blocking ports 1420 & 3001
 - Solution 3: Ensure both devices are on same Wi-Fi network
-- Solution 4: Restart the dev server after setting env variable
+- Solution 4: Restart the dev server after updating the IP in `tauri.conf.json` and `vite.config.ts`
 
 **Problem:** Connection drops or keeps reconnecting
 - Solution: Check signaling server is running (`npm run server`)
@@ -415,11 +645,6 @@ Signaling server running on wss://192.168.100.80:3001
 - Solution: Check browser permissions (camera/microphone)
 - Solution: Verify WebRTC ICE candidates can traverse network
 - Solution: Try running on same machine first (localhost) to isolate network vs app issues
-
-**Environment Variable Fallback:**
-- If `VITE_NETWORK_IP` is NOT set: App defaults to `localhost` (single device only)
-- If `VITE_NETWORK_IP` is set but empty: App defaults to `localhost`
-- If `VITE_NETWORK_IP` is set to valid IP: App uses that IP for network-wide access
 
 ---
 
@@ -650,50 +875,170 @@ dist/                          # Static files ready for deployment
 
 ## Troubleshooting
 
-### Issue 1: "Your connection is not private" - HTTPS Certificate Warning
+### First-Time Clone Setup Issues
+
+#### Issue: "npm: command not found"
+**Problem:** Node.js/npm not installed or not in PATH  
+**Solution:**
+1. Download and install Node.js 18+ from https://nodejs.org
+2. Restart your terminal/PowerShell
+3. Verify: `node --version && npm --version`
+
+#### Issue: "rustup: command not found" or Rust missing
+**Problem:** Rust toolchain not installed  
+**Solution:**
+1. Download Rust from https://rustup.rs
+2. Run installer and follow prompts
+3. Restart your terminal
+4. Verify: `rustc --version && cargo --version`
+
+#### Issue: "Microsoft Visual C++ Build Tools missing"
+**Problem:** Can't compile Tauri on Windows  
+**Solution:**
+1. Download Visual Studio Installer: https://visualstudio.microsoft.com/downloads/
+2. Select "Visual Studio Build Tools" (free)
+3. During installation, select **"Desktop development with C++"**
+4. Complete installation (~30 minutes)
+5. Verify: Files exist at `C:\Program Files (x86)\Microsoft Visual Studio\`
+
+#### Issue: "x86_64-pc-windows-msvc target not found"
+**Problem:** Rust target architecture not installed  
+**Solution:**
+```powershell
+# Run in PowerShell (Admin)
+rustup target add x86_64-pc-windows-msvc
+
+# Verify:
+rustup target list | Select-String "x86_64-pc-windows-msvc"
+# Should show: x86_64-pc-windows-msvc (installed)
+```
+
+#### Issue: "npm install" takes too long or fails
+**Problem:** Network issues or mirror problems  
+**Solution:**
+```powershell
+# Clear npm cache
+npm cache clean --force
+
+# Try again
+npm install
+
+# If still failing, try with specific registry:
+npm install --registry https://registry.npmjs.org/
+```
+
+#### Issue: "Certificates not found" - App won't start
+**Problem:** HTTPS certificates missing from `./certs/` directory  
+**Solution:**
+```powershell
+# From Frontend directory, generate certificates:
+node scripts/generate-certs.js
+
+# Verify files were created:
+Get-ChildItem ./certs/
+
+# You should see: cert.pem and key.pem
+```
+
+**If certificate generation fails:**
+```powershell
+# Try with OpenSSL (must be installed):
+openssl req -x509 -newkey rsa:2048 -keyout ./certs/key.pem -out ./certs/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Dev/CN=localhost"
+
+# If OpenSSL not found, install it:
+# Download from: https://slproweb.com/products/Win32OpenSSL.html
+```
+
+#### Issue: "Cannot find module" or lint errors  
+**Problem:** Dependencies not installed or TypeScript compilation issue  
+**Solution:**
+```powershell
+# From Frontend directory
+rm node_modules -Force -Recurse    # Delete node_modules
+rm package-lock.json               # Delete lock file
+npm install                        # Reinstall from scratch
+
+# Check TypeScript compilation:
+npx tsc --noEmit
+
+# Run linting:
+npm run lint
+```
+
+#### Issue: Files missing after clone
+**Problem:** Git failed to extract all files  
+**Solution:**
+```powershell
+# Verify repository was cloned correctly:
+git status
+
+# If files are missing, re-clone:
+cd ..
+rmdir wesign -Recurse -Force
+git clone https://github.com/Mo-aziz/weSign.git
+cd wesign && cd Frontend
+npm install
+```
+
+---
+
+### Running & Development Issues
+
+#### Issue 1: "Your connection is not private" - HTTPS Certificate Warning
+**Problem:** Browser shows security warning  
 **Solution:** This is **normal and expected** with self-signed certificates in development.
 - Click "Advanced"
 - Click "Proceed to localhost" (or equivalent)
-- This is safe for development - the app uses secure mkcert certificates
+- This is safe for development - the app uses secure certificates
 - Your browser will remember this and not show the warning again
 
-### Issue 2: "Command 'tauri' not found"
+#### Issue 2: "Command 'tauri' not found"
+**Problem:** Tauri CLI not available  
 **Solution:** Ensure Tauri CLI is installed:
-```bash
+```powershell
 npm install
 npx tauri --version
 ```
 
-### Issue 3: Rust toolchain not found
-**Solution:** Install Rust:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup target add x86_64-pc-windows-msvc
-```
+#### Issue 3: App window shows blank/nothing
+**Problem:** Vite dev server not running or certificates missing  
+**Solution:**
+1. Verify certificates exist: `Test-Path ./certs/key.pem` and `Test-Path ./certs/cert.pem`
+2. If missing, generate: `node scripts/generate-certs.js`
+3. Kill any existing processes: `Get-Process node | Stop-Process -Force`
+4. Restart: `npm run tauri:dev`
 
-### Issue 4: Camera/Microphone not working
+#### Issue 4: Hot Module Replacement (HMR) not working
+**Problem:** Code changes not reflecting in app  
+**Solution:**
+1. Wait a few seconds for compilation
+2. Manually refresh browser (Ctrl+R)
+3. Check browser console for errors
+4. Verify both Vite server and Tauri window are running
+
+#### Issue 5: Camera/Microphone not working
+**Problem:** App requests permissions but camera/mic doesn't activate  
 **Solution:**
 - Check Windows Privacy Settings → Camera/Microphone → allow app
 - Requires HTTPS (which app uses) for modern browser access
 - Try restarting app
-- Test webcam with another app (e.g., Windows Camera)
+- Test webcam with Windows Camera app
+- Check if another app is using the camera
 
-### Issue 5: Signaling server connection fails
-**Error:** "Connection refused on port 3001" or "Failed to connect to wss://localhost:3001"
-
+#### Issue 6: Signaling server connection fails
+**Error:** "Connection refused on port 3001" or "Failed to connect to wss://localhost:3001"  
 **Solution:**
-1. Ensure server runs: `npm run server`
-2. Check server is listening on `localhost:3001`:
-   ```bash
-   netstat -ano | findstr :3001
+1. Ensure server is running: `npm run server` (in separate terminal)
+2. Check server is listening:
+   ```powershell
+   Get-NetTCPConnection -LocalPort 3001 -State Listen
    ```
 3. If port 3001 in use, change in `signaling-server.js`:
    ```javascript
-   const PORT = process.env.PORT || 3001;  // Change 3001 to another port
+   const PORT = process.env.PORT || 3001;  // Change to another port
    ```
-4. Update `useCallService.ts` to match the new port:
-   ```typescript
-   const WS_URL = 'wss://localhost:3001';  // Update port here too
+
+#### Issue 7: "Module not found" errors
    ```
 
 ### Issue 6: WebRTC connection fails
@@ -718,7 +1063,7 @@ rustup target add x86_64-pc-windows-msvc
 3. Click "Test Voice" to verify
 4. Check browser console for voice selection logs:
    ```
-   [Auto-TTS] ✓ Found [voice] (same language + same gender)
+   [Auto-TTS] Found [voice] (same language + same gender)
    ```
 5. If your preferred voice not available:
    - Check Windows → Settings → Time & Language → Speech

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import VoiceSettings from '../components/VoiceSettings';
 import { speak } from '../services/localTTS';
+import { updateUserTypeOnServer } from '../services/useCallService';
 
 const Settings = () => {
   const { user, toggleDarkMode, updateUser, logout } = useAppContext();
@@ -11,6 +12,22 @@ const Settings = () => {
     rate: user?.voiceSettings?.rate ?? 1.0,
     pitch: user?.voiceSettings?.pitch ?? 1.0
   });
+
+  // Auto-save voice settings to context whenever they change
+  useEffect(() => {
+    if (voiceSettings.voiceName) {
+      console.log(`💾 [Settings] Auto-saving voice settings: ${voiceSettings.voiceName}`);
+      updateUser({
+        username: user?.username || '',
+        isDeaf: user?.isDeaf || false,
+        voiceSettings: {
+          voiceName: voiceSettings.voiceName,
+          rate: voiceSettings.rate,
+          pitch: voiceSettings.pitch
+        }
+      });
+    }
+  }, [voiceSettings, user?.username, user?.isDeaf, updateUser]);
 
   const handleSaveProfile = () => {
     if (!user?.username.trim()) {
@@ -40,14 +57,25 @@ const Settings = () => {
     setStatusMessage('Testing voice...');
   };
 
-  const handleToggleUserType = () => {
+  const handleToggleUserType = async () => {
     if (user) {
-      updateUser({
-        username: user.username,
-        isDeaf: !user.isDeaf,
-        voiceSettings: user.voiceSettings
-      });
-      setStatusMessage(`Switched to ${!user.isDeaf ? 'sign language user' : 'hearing user'} mode.`);
+      const newIsDeaf = !user.isDeaf;
+      
+      try {
+        // Update on server first
+        await updateUserTypeOnServer(newIsDeaf);
+        
+        // Then update local state
+        updateUser({
+          username: user.username,
+          isDeaf: newIsDeaf,
+          voiceSettings: user.voiceSettings
+        });
+        setStatusMessage(` Switched to ${newIsDeaf ? 'sign language user' : 'hearing user'} mode. Server updated.`);
+      } catch (error) {
+        console.error('Failed to update user type on server:', error);
+        setStatusMessage(` Error updating user type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
   };
 

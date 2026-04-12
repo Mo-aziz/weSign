@@ -42,7 +42,7 @@ type AppContextValue = {
   endCall: () => void;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
-  translationMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean }>;
+  translationMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean; isLocal?: boolean }>;
   transcriptMessages: Array<{ text: string; timestamp: number; shouldSpeak: boolean }>;
   sendTranslation: (text: string, shouldSpeak: boolean) => void;
   sendTranscript: (text: string) => void;

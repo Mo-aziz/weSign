@@ -38,7 +38,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "https://localhost:1420",
+    "devPath": "https://192.168.100.80:1420",
     "distDir": "../dist"
   }
 }

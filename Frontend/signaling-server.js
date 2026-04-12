@@ -6,7 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3001;
-const NETWORK_IP = process.env.VITE_NETWORK_IP || 'localhost';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Certificate paths
@@ -63,6 +62,27 @@ wss.on('connection', (ws, req) => {
             success: true,
             userId: userId
           }));
+          break;
+
+        case 'user-update':
+          // Update user's type when they toggle in Settings
+          if (userId && clients.has(userId)) {
+            const oldIsDeaf = clients.get(userId).isDeaf;
+            const newIsDeaf = data.isDeaf;
+            
+            // Update in-memory record
+            clients.get(userId).isDeaf = newIsDeaf;
+            
+            console.log(`✓ Updated user type for ${username} (${userId}): ${oldIsDeaf ? 'Deaf' : 'Hearing'} → ${newIsDeaf ? 'Deaf' : 'Hearing'}`);
+            
+            // Confirm update was received
+            ws.send(JSON.stringify({
+              type: 'user-update-confirmed',
+              success: true,
+              userId: userId,
+              newIsDeaf: newIsDeaf
+            }));
+          }
           break;
 
         case 'query-user':
@@ -134,7 +154,7 @@ wss.on('connection', (ws, req) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✓ Signaling server running on WSS port ${PORT}`);
   console.log(`✓ Both HTTP and WSS available (WSS for remote clients)`);
-  console.log(`✓ Access via: wss://${NETWORK_IP}:${PORT}/\n`);
+  console.log(`✓ Access via: wss://192.168.100.80:${PORT}/\n`);
 });
 
 // Handle graceful shutdown

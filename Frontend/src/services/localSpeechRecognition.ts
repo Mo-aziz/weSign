@@ -39,12 +39,14 @@ interface SpeechRecognitionErrorEvent extends Event {
   message: string;
 }
 
-declare var SpeechRecognition: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare const SpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
 };
 
-declare var webkitSpeechRecognition: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare const webkitSpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
 };
@@ -60,10 +62,10 @@ const isSpeechRecognitionSupported = () => {
 // Get the SpeechRecognition constructor (works in Chrome/Edge)
 const getSpeechRecognition = (): typeof SpeechRecognition | null => {
   if ('SpeechRecognition' in window) {
-    return (window as any).SpeechRecognition;
+    return (window as unknown as Record<string, unknown>).SpeechRecognition as typeof SpeechRecognition;
   }
   if ('webkitSpeechRecognition' in window) {
-    return (window as any).webkitSpeechRecognition;
+    return (window as unknown as Record<string, unknown>).webkitSpeechRecognition as typeof SpeechRecognition;
   }
   return null;
 };
@@ -82,10 +84,11 @@ export type SpeechRecognitionCallbackResult = {
 export type SpeechRecognitionCallbacks = {
   onResult?: (result: SpeechRecognitionCallbackResult) => void;
   onError?: (error: Error) => void;
-  onEnd?: () => void;
+  onEnd?: (isManualStop: boolean) => void;
 };
 
 let recognitionInstance: SpeechRecognition | null = null;
+let wasManuallyStopped = false; // Track if stop was manual vs automatic timeout
 
 export const startSpeechRecognition = (
   options: SpeechRecognitionOptions = {},
@@ -118,6 +121,7 @@ export const startSpeechRecognition = (
 
     const recognition = new SpeechRecognition();
     recognitionInstance = recognition;
+    wasManuallyStopped = false; // Reset flag for this session
 
     recognition.continuous = options.continuous ?? true;
     recognition.interimResults = options.interimResults ?? true;
@@ -145,20 +149,20 @@ export const startSpeechRecognition = (
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      const error = new Error(`Speech recognition error: ${event.error}`);
-      callbacks.onError?.(error);
-      
-      // Don't reject on certain errors that are recoverable
-      if (event.error === 'no-speech' || event.error === 'audio-capture') {
+      // Don't treat intentional aborts or recoverable errors as failures
+      if (event.error === 'aborted' || event.error === 'no-speech' || event.error === 'audio-capture') {
+        console.log(`🎤 Recoverable speech recognition error (ignored): ${event.error}`);
         return;
       }
       
+      const error = new Error(`Speech recognition error: ${event.error}`);
+      callbacks.onError?.(error);
       reject(error);
     };
 
     recognition.onend = () => {
       recognitionInstance = null;
-      callbacks.onEnd?.();
+      callbacks.onEnd?.(wasManuallyStopped);
       resolve();
     };
 
@@ -176,6 +180,7 @@ export const startSpeechRecognition = (
 export const stopSpeechRecognition = (): void => {
   if (recognitionInstance) {
     try {
+      wasManuallyStopped = true; // Mark as intentional stop
       recognitionInstance.stop();
     } catch (error) {
       console.warn('Error stopping speech recognition:', error);

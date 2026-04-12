@@ -104,7 +104,7 @@ const Translation = () => {
 
   // Detect if running in Tauri
   useEffect(() => {
-    const isTauri = !!(window as any).__TAURI__;
+    const isTauri = !!((window as unknown as Record<string, unknown>).__TAURI__);
     setIsInTauri(isTauri);
   }, []);
 

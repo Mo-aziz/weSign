@@ -193,8 +193,18 @@ const CallModal = () => {
               setIsMicListening(false);
               lastFinalTranscriptRef.current = '';
             },
-            onEnd: () => {
-              setIsMicListening(false);
+            onEnd: (isManualStop) => {
+              // Only close mic if user manually stopped it
+              // If it's an auto-timeout (no-speech), auto-restart it
+              if (isManualStop) {
+                setIsMicListening(false);
+              } else if (isMicListeningRef.current) {
+                // Auto-restart on browser timeout
+                console.log('🔄 Browser timeout detected during initial speech recognition, auto-restarting');
+                setTimeout(() => {
+                  autoRestartSpeechRecognitionOnTimeout();
+                }, 100);
+              }
               lastFinalTranscriptRef.current = '';
             },
           }
@@ -268,65 +278,539 @@ const CallModal = () => {
     }
   }, [callState, user?.isDeaf, handleMicToggle, startRecognition, stopRecognition]);
 
+  // Track received messages that we've already spoken
+  const spokenReceivedMessagesRef = useRef<Set<number>>(new Set());
+  
+  // Refs for microphone pause/resume during TTS (use refs to avoid closure staleness)
+  const isMicPausedRef = useRef(false);
+  const pausedMessageTimestampRef = useRef<number | null>(null);
+  const ttsResumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsSafetyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMicListeningRef = useRef(isMicListening); // Track mic state in ref to avoid stale closure
+
+  // Update the ref whenever isMicListening changes
+  useEffect(() => {
+    isMicListeningRef.current = isMicListening;
+  }, [isMicListening]);
+
+  // Helper to auto-restart speech recognition if it times out (browser no-speech error)
+  const autoRestartSpeechRecognitionOnTimeout = useCallback(async () => {
+    // Only auto-restart if the mic is supposed to be on
+    if (!isMicListeningRef.current) return;
+
+    console.log('🔄 Auto-restarting speech recognition after browser timeout');
+    try {
+      await startSpeechRecognition(
+        {
+          continuous: true,
+          interimResults: true,
+          lang: 'en-US',
+        },
+        {
+          onResult: (result) => {
+            const currentTranscript = result.transcript;
+            const lastFinal = lastFinalTranscriptRef.current;
+            
+            let newPart = '';
+            if (lastFinal) {
+              if (currentTranscript.startsWith(lastFinal)) {
+                newPart = currentTranscript.slice(lastFinal.length).trim();
+              } else {
+                newPart = currentTranscript.trim();
+              }
+            } else {
+              newPart = currentTranscript.trim();
+            }
+            
+            if (newPart || !result.isFinal) {
+              setSpeechEditable(newPart);
+              setIsSpeechEditing(true);
+            }
+            
+            if (result.isFinal && newPart) {
+              const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+              
+              sentences.forEach((sentence) => {
+                if (sentence.trim()) {
+                  console.log('Final sentence detected, sending after auto-restart:', sentence.trim());
+                  sendTranscript(sentence.trim());
+                }
+              });
+              
+              lastFinalTranscriptRef.current = currentTranscript;
+              setSpeechEditable('');
+              setIsSpeechEditing(false);
+            }
+          },
+          onError: (error) => {
+            console.error('Speech recognition error (auto-restart):', error);
+            // Don't change state on error, let the user manually close if needed
+          },
+          onEnd: (isManualStop) => {
+            // If auto-timeout and mic should still be on, restart again
+            if (!isManualStop && isMicListeningRef.current) {
+              console.log('🔄 Speech recognition ended by timeout again, restarting...');
+              setTimeout(() => {
+                autoRestartSpeechRecognitionOnTimeout();
+              }, 100);
+            }
+          },
+        }
+      );
+    } catch (error) {
+      console.error('❌ Failed to auto-restart speech recognition:', error);
+    }
+  }, [startSpeechRecognition, sendTranscript]);
+
+  // Play TTS for received translation messages from other user
+  useEffect(() => {
+    // Only the hearing user should hear received translations
+    if (user?.isDeaf) return;
+
+    // Find received messages with shouldSpeak = true that we haven't spoken yet
+    const receivedMessages = translationMessages.filter(
+      (msg: any) => msg.isLocal === false && msg.shouldSpeak === true
+    );
+
+    if (receivedMessages.length === 0) return;
+
+    // Get the most recent one
+    const lastReceivedMessage = receivedMessages[receivedMessages.length - 1];
+    
+    // Check if we've already spoken this message
+    if (spokenReceivedMessagesRef.current.has(lastReceivedMessage.timestamp)) {
+      return; // Already spoken, skip
+    }
+
+    // Mark as spoken
+    spokenReceivedMessagesRef.current.add(lastReceivedMessage.timestamp);
+    console.log('🔊 Playing TTS for received translation:', lastReceivedMessage.text);
+
+    // Pause microphone to avoid TTS feedback
+    if (isMicListening) {
+      console.log('🎙️ Pausing microphone during TTS playback (preventing echo)');
+      stopSpeechRecognition();
+      isMicPausedRef.current = true;
+      pausedMessageTimestampRef.current = lastReceivedMessage.timestamp;
+    }
+
+    // Play TTS using Web Speech API
+    const utterance = new SpeechSynthesisUtterance(lastReceivedMessage.text);
+    
+    // Use user's voice settings if available
+    utterance.rate = user?.voiceSettings?.rate ?? 1.0;
+    utterance.pitch = user?.voiceSettings?.pitch ?? 1.0;
+    utterance.volume = 1.0;
+
+    // Smart voice selection with gender + language awareness
+    const voices = window.speechSynthesis.getVoices();
+    
+    console.log(`📢 [TTS] User voice settings: ${user?.voiceSettings?.voiceName || 'NOT SET'} | Available voices: ${voices.length}`);
+    
+    if (user?.voiceSettings?.voiceName && voices.length > 0) {
+      const requestedVoiceName = user.voiceSettings.voiceName;
+      console.log(`🎯 [TTS] Attempting to find voice: "${requestedVoiceName}"`);
+      
+      // Helper function to detect gender from voice name
+      const detectGender = (voiceName: string): 'female' | 'male' | 'neutral' => {
+        const lowerName = voiceName.toLowerCase();
+        const femaleKeywords = ['female', 'woman', 'girl', 'mrs', 'ms', 'she', 'aria', 'clara', 'emma', 'eva', 'zira', 'susan', 'moira', 'victoria'];
+        const maleKeywords = ['male', 'man', 'boy', 'mr', 'he', 'david', 'mark', 'james', 'george', 'henry', 'jorge', 'juan'];
+        
+        if (femaleKeywords.some(kw => lowerName.includes(kw))) return 'female';
+        if (maleKeywords.some(kw => lowerName.includes(kw))) return 'male';
+        return 'neutral';
+      };
+      
+      const requestedGender = detectGender(requestedVoiceName);
+      
+      // Helper to extract language code from voice
+      const getLanguageCode = (voiceName: string): string | null => {
+        // First try to extract language code like (en-US), (it-IT), etc.
+        const codeMatch = voiceName.match(/\(([a-z]{2}-[A-Z]{2})\)/);
+        if (codeMatch) return codeMatch[1];
+        
+        // If no code found, try to match native language names
+        const lowerName = voiceName.toLowerCase();
+        const languageMap: { [key: string]: string } = {
+          // English
+          'english': 'en-US',
+          'inglese': 'en-US',
+          'anglais': 'en-US',
+          
+          // Italian
+          'italian': 'it-IT',
+          'italiano': 'it-IT',
+          
+          // French
+          'french': 'fr-FR',
+          'français': 'fr-FR',
+          'francaise': 'fr-FR',
+          
+          // Spanish
+          'spanish': 'es-ES',
+          'español': 'es-ES',
+          
+          // German
+          'german': 'de-DE',
+          'deutsch': 'de-DE',
+          
+          // Portuguese
+          'portuguese': 'pt-PT',
+          'português': 'pt-PT',
+          'portugues': 'pt-PT',
+          
+          // Dutch
+          'dutch': 'nl-NL',
+          'nederlands': 'nl-NL',
+          
+          // Polish
+          'polish': 'pl-PL',
+          'polski': 'pl-PL',
+          
+          // Russian
+          'russian': 'ru-RU',
+          'русский': 'ru-RU',
+          
+          // Japanese
+          'japanese': 'ja-JP',
+          '日本語': 'ja-JP',
+          
+          // Chinese (Mandarin)
+          'chinese': 'zh-CN',
+          'mandarin': 'zh-CN',
+          '中文': 'zh-CN',
+          
+          // Korean
+          'korean': 'ko-KR',
+          '한국어': 'ko-KR',
+          
+          // Arabic
+          'arabic': 'ar-SA',
+          'العربية': 'ar-SA',
+          
+          // Hindi
+          'hindi': 'hi-IN',
+          'हिन्दी': 'hi-IN',
+          
+          // Turkish
+          'turkish': 'tr-TR',
+          'türkçe': 'tr-TR',
+          'turkce': 'tr-TR',
+        };
+        
+        for (const [langName, code] of Object.entries(languageMap)) {
+          if (lowerName.includes(langName)) {
+            return code;
+          }
+        }
+        
+        return null;
+      };
+      
+      const requestedLang = getLanguageCode(requestedVoiceName);
+      
+      console.log(`🎤 Voice matching: "${requestedVoiceName}" | Gender: ${requestedGender} | Lang: ${requestedLang}`);
+      
+      // Priority 1: Exact match
+      let selectedVoice = voices.find(v => v.name === requestedVoiceName);
+      if (selectedVoice) {
+        console.log(`✅ Priority 1 (Exact): Found "${selectedVoice.name}"`);
+        utterance.voice = selectedVoice;
+      } else {
+        // Priority 2: Case-insensitive / partial match
+        selectedVoice = voices.find(v => v.name.toLowerCase() === requestedVoiceName.toLowerCase());
+        if (selectedVoice) {
+          console.log(`✅ Priority 2 (Partial): Found "${selectedVoice.name}"`);
+          utterance.voice = selectedVoice;
+        } else if (requestedLang) {
+          // Priority 3: Same language + same gender
+          selectedVoice = voices.find(v => {
+            const voiceLang = getLanguageCode(v.name);
+            return voiceLang === requestedLang && detectGender(v.name) === requestedGender;
+          });
+          if (selectedVoice) {
+            console.log(`✅ Priority 3 (Same Lang + Gender): Found "${selectedVoice.name}"`);
+            utterance.voice = selectedVoice;
+          } else {
+            // Priority 4: Same language + any gender
+            selectedVoice = voices.find(v => getLanguageCode(v.name) === requestedLang);
+            if (selectedVoice) {
+              console.log(`✅ Priority 4 (Same Lang): Found "${selectedVoice.name}"`);
+              utterance.voice = selectedVoice;
+            } else {
+              // Priority 5: English + same gender
+              selectedVoice = voices.find(v => {
+                const voiceLang = getLanguageCode(v.name);
+                return voiceLang?.startsWith('en') && detectGender(v.name) === requestedGender;
+              });
+              if (selectedVoice) {
+                console.log(`✅ Priority 5 (English + Gender): Found "${selectedVoice.name}"`);
+                utterance.voice = selectedVoice;
+              } else {
+                // Priority 6: English (any gender)
+                selectedVoice = voices.find(v => getLanguageCode(v.name)?.startsWith('en'));
+                if (selectedVoice) {
+                  console.log(`✅ Priority 6 (English): Found "${selectedVoice.name}"`);
+                  utterance.voice = selectedVoice;
+                } else {
+                  // Priority 7: Any available voice
+                  selectedVoice = voices[0];
+                  console.log(`✅ Priority 7 (Default): Using "${selectedVoice?.name}"`);
+                  utterance.voice = selectedVoice || undefined;
+                }
+              }
+            }
+          }
+        } else {
+          // If no language detected, try gender match or default
+          selectedVoice = voices.find(v => detectGender(v.name) === requestedGender);
+          if (selectedVoice) {
+            console.log(`✅ Priority (Gender Match): Found "${selectedVoice.name}"`);
+            utterance.voice = selectedVoice;
+          } else {
+            console.log(`✅ Priority (Default): Using first available voice`);
+            utterance.voice = voices[0] || undefined;
+          }
+        }
+      }
+    } else {
+      // Voice settings not available or no voices loaded
+      if (!user?.voiceSettings?.voiceName) {
+        console.warn(`⚠️ [TTS] No voice settings configured. Using system default.`);
+      }
+      if (voices.length === 0) {
+        console.warn(`⚠️ [TTS] No voices available yet (${voices.length} voices)`);
+      }
+    }
+
+    // Log the final voice being used
+    console.log(`📡 [TTS] Final voice: ${utterance.voice?.name || 'SYSTEM DEFAULT'}`);
+    if (utterance.voice) {
+      console.log(`  → Lang: ${utterance.voice.lang}, Local: ${utterance.voice.localService}`);
+    }
+
+    utterance.onend = () => {
+      console.log('🔊 TTS completed for received translation');
+      
+      // Resume microphone if we paused it
+      if (isMicPausedRef.current && pausedMessageTimestampRef.current === lastReceivedMessage.timestamp) {
+        console.log('✅ [Auto-TTS] Attempting to resume speech recognition after TTS end');
+        
+        // Clear any pending timeouts
+        if (ttsResumeTimeoutRef.current) {
+          clearTimeout(ttsResumeTimeoutRef.current);
+        }
+        if (ttsSafetyTimeoutRef.current) {
+          clearTimeout(ttsSafetyTimeoutRef.current);
+        }
+
+        // Attempt to resume microphone
+        isMicPausedRef.current = false;
+        pausedMessageTimestampRef.current = null;
+        
+        // Resume with slight delay to ensure speech synthesis fully stopped
+        ttsResumeTimeoutRef.current = setTimeout(async () => {
+          console.log('🎙️ Resuming microphone after TTS');
+          try {
+            setIsMicListening(true);
+            await startSpeechRecognition(
+              {
+                continuous: true,
+                interimResults: true,
+                lang: 'en-US',
+              },
+              {
+                onResult: (result) => {
+                  const currentTranscript = result.transcript;
+                  const lastFinal = lastFinalTranscriptRef.current;
+                  
+                  let newPart = '';
+                  if (lastFinal) {
+                    if (currentTranscript.startsWith(lastFinal)) {
+                      newPart = currentTranscript.slice(lastFinal.length).trim();
+                    } else {
+                      newPart = currentTranscript.trim();
+                    }
+                  } else {
+                    newPart = currentTranscript.trim();
+                  }
+                  
+                  if (newPart || !result.isFinal) {
+                    setSpeechEditable(newPart);
+                    setIsSpeechEditing(true);
+                  }
+                  
+                  if (result.isFinal && newPart) {
+                    const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+                    
+                    sentences.forEach((sentence) => {
+                      if (sentence.trim()) {
+                        console.log('Final sentence detected, sending to non-hearing (TTS resume):', sentence.trim());
+                        sendTranscript(sentence.trim());
+                      }
+                    });
+                    
+                    lastFinalTranscriptRef.current = currentTranscript;
+                    setSpeechEditable('');
+                    setIsSpeechEditing(false);
+                  }
+                },
+                onError: (error) => {
+                  console.error('Speech recognition error (TTS resume):', error);
+                  setIsMicListening(false);
+                  lastFinalTranscriptRef.current = '';
+                },
+                onEnd: (isManualStop) => {
+                  // Only close if user manually stopped it (not auto-timeout)
+                  if (isManualStop) {
+                    setIsMicListening(false);
+                  } else if (isMicListeningRef.current) {
+                    // Auto-restart on browser timeout
+                    console.log('🔄 Browser timeout after TTS resume, auto-restarting');
+                    setTimeout(() => {
+                      autoRestartSpeechRecognitionOnTimeout();
+                    }, 100);
+                  }
+                  lastFinalTranscriptRef.current = '';
+                },
+              }
+            );
+          } catch (error) {
+            console.error('❌ Failed to resume microphone after TTS:', error);
+            setIsMicListening(false);
+          }
+        }, 100);
+
+        // Safety timeout: force microphone open if resume hasn't happened after 3 seconds
+        ttsSafetyTimeoutRef.current = setTimeout(() => {
+          if (!isMicListeningRef.current && isMicPausedRef.current === false) {
+            console.log('⚠️ [Auto-TTS] SAFETY TIMEOUT: Forcing microphone open after 3 seconds');
+            // Force toggle the mic open
+            setIsMicListening(true);
+            handleMicToggle().catch(err => console.error('Safety timeout: Failed to open mic:', err));
+          }
+        }, 3000);
+      }
+    };
+
+    utterance.onerror = (event) => {
+      console.error('🔊 TTS error:', event);
+      
+      // Resume microphone on error too
+      if (isMicPausedRef.current && pausedMessageTimestampRef.current === lastReceivedMessage.timestamp) {
+        console.log('✅ [Auto-TTS] Resuming after TTS error');
+        
+        isMicPausedRef.current = false;
+        pausedMessageTimestampRef.current = null;
+        
+        setTimeout(async () => {
+          console.log('🎙️ Resuming microphone after TTS error');
+          try {
+            setIsMicListening(true);
+            await startSpeechRecognition(
+              {
+                continuous: true,
+                interimResults: true,
+                lang: 'en-US',
+              },
+              {
+                onResult: (result) => {
+                  const currentTranscript = result.transcript;
+                  const lastFinal = lastFinalTranscriptRef.current;
+                  
+                  let newPart = '';
+                  if (lastFinal) {
+                    if (currentTranscript.startsWith(lastFinal)) {
+                      newPart = currentTranscript.slice(lastFinal.length).trim();
+                    } else {
+                      newPart = currentTranscript.trim();
+                    }
+                  } else {
+                    newPart = currentTranscript.trim();
+                  }
+                  
+                  if (newPart || !result.isFinal) {
+                    setSpeechEditable(newPart);
+                    setIsSpeechEditing(true);
+                  }
+                  
+                  if (result.isFinal && newPart) {
+                    const sentences = newPart.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+                    
+                    sentences.forEach((sentence) => {
+                      if (sentence.trim()) {
+                        console.log('Final sentence detected, sending to non-hearing (TTS error recovery):', sentence.trim());
+                        sendTranscript(sentence.trim());
+                      }
+                    });
+                    
+                    lastFinalTranscriptRef.current = currentTranscript;
+                    setSpeechEditable('');
+                    setIsSpeechEditing(false);
+                  }
+                },
+                onError: (error) => {
+                  console.error('Speech recognition error (TTS error recovery):', error);
+                  setIsMicListening(false);
+                  lastFinalTranscriptRef.current = '';
+                },
+                onEnd: (isManualStop) => {
+                  // Only close if user manually stopped it (not auto-timeout)
+                  if (isManualStop) {
+                    setIsMicListening(false);
+                  } else if (isMicListeningRef.current) {
+                    // Auto-restart on browser timeout
+                    console.log('🔄 Browser timeout in TTS error recovery, auto-restarting');
+                    setTimeout(() => {
+                      autoRestartSpeechRecognitionOnTimeout();
+                    }, 100);
+                  }
+                  lastFinalTranscriptRef.current = '';
+                },
+              }
+            );
+          } catch (error) {
+            console.error('❌ Failed to resume microphone after TTS error:', error);
+            setIsMicListening(false);
+          }
+        }, 100);
+      }
+    };
+
+    window.speechSynthesis.speak(utterance);
+
+    // Cleanup on unmount
+    return () => {
+      if (ttsResumeTimeoutRef.current) {
+        clearTimeout(ttsResumeTimeoutRef.current);
+      }
+      if (ttsSafetyTimeoutRef.current) {
+        clearTimeout(ttsSafetyTimeoutRef.current);
+      }
+    };
+  }, [translationMessages, user?.isDeaf, user?.voiceSettings, handleMicToggle]);
+
   // Remove old useEffect - transcript is now handled in handleMicToggle
 
   const handleConfirmTranslation = useCallback((text: string) => {
     const entry = signService.confirmTranslation(text);
     if (entry) {
-      sendTranslation(entry.text, true); // Set shouldSpeak to true so hearing person hears it
-      
-      // Speak the entire text at once with better settings to prevent interruption
-      const utterance = new SpeechSynthesisUtterance(entry.text);
-      
-      // Configure utterance for better completion
-      utterance.rate = user?.voiceSettings?.rate ?? 1.0;
-      utterance.pitch = user?.voiceSettings?.pitch ?? 1.0;
-      utterance.volume = 1.0;
-      
-      // Set voice if available - wait for voices to be loaded
-      const setVoiceAndSpeak = () => {
-        const voices = window.speechSynthesis.getVoices();
-        console.log('Available voices:', voices.length);
-        
-        if (user?.voiceSettings?.voiceName) {
-          const voice = voices.find(v => v.name === user?.voiceSettings?.voiceName);
-          if (voice) {
-            utterance.voice = voice;
-            console.log('Using voice:', voice.name);
-          } else {
-            console.log('Voice not found, using default');
-          }
-        }
-        
-        // Ensure speech completes
-        utterance.onend = () => {
-          console.log('Speech completed successfully');
-        };
-        
-        utterance.onerror = (event) => {
-          console.error('Speech error:', event);
-        };
-        
-        // Cancel any existing speech before starting new one
-        window.speechSynthesis.cancel();
-        
-        // Small delay to ensure cancel is processed
-        setTimeout(() => {
-          window.speechSynthesis.speak(utterance);
-          console.log('Speaking:', entry.text);
-        }, 100);
-      };
-      
-      // If voices are not loaded yet, wait for them
-      if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
-          setVoiceAndSpeak();
-        };
-      } else {
-        setVoiceAndSpeak();
+      // Determine if the other user is deaf or hearing
+      let shouldSpeakToOtherUser = false;
+      if (currentCall) {
+        const otherUser = currentCall.caller.id === user?.id ? currentCall.callee : currentCall.caller;
+        shouldSpeakToOtherUser = !otherUser.isDeaf; // Flag for receiver - they will speak it
+        console.log(`🔊 Call type check: other user "${otherUser.username}" isDeaf=${otherUser.isDeaf} → shouldSpeak=${shouldSpeakToOtherUser}`);
       }
+      
+      // Send translation with appropriate shouldSpeak flag (receiver will play TTS)
+      sendTranslation(entry.text, shouldSpeakToOtherUser);
+      
+      // DO NOT play audio on sender side - receiver will handle TTS
+      console.log('✅ Translation sent, receiver will handle TTS if needed');
     }
-  }, [signService, sendTranslation, user?.voiceSettings, user?.isDeaf]);
+  }, [signService, sendTranslation, user?.voiceSettings, user?.id, currentCall]);
 
   const endCall = useCallback(() => {
     stopRecognition();
@@ -334,6 +818,19 @@ const CallModal = () => {
     if (isMicListening) {
       handleMicToggle();
     }
+    
+    // Cleanup TTS and mic pause refs
+    console.log('🧹 Cleaning up TTS and microphone refs on call end');
+    if (ttsResumeTimeoutRef.current) {
+      clearTimeout(ttsResumeTimeoutRef.current);
+      ttsResumeTimeoutRef.current = null;
+    }
+    if (ttsSafetyTimeoutRef.current) {
+      clearTimeout(ttsSafetyTimeoutRef.current);
+      ttsSafetyTimeoutRef.current = null;
+    }
+    isMicPausedRef.current = false;
+    pausedMessageTimestampRef.current = null;
     
     // Stop all tracks in local stream to turn off camera
     if (localStream) {
@@ -435,18 +932,36 @@ const CallModal = () => {
             )}
           </div>
           
-          {/* Incoming text from hearing user */}
+          {/* Incoming messages from other user - show both translations and transcripts */}
           <div>
             <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">What they're saying</p>
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 min-h-[60px] max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-700">
-              {transcriptMessages.length > 0 ? (
-                transcriptMessages.slice(-3).map((msg, index) => (
-                  <p key={index} className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
-                    {msg.text}
-                  </p>
-                ))
+              {translationMessages.filter((msg: any) => msg.isLocal === false).length > 0 || transcriptMessages.filter((msg: any) => msg.isLocal === false).length > 0 ? (
+                <>
+                  {/* Show sign translations from other user */}
+                  {translationMessages
+                    .filter((msg: any) => msg.isLocal === false)
+                    .slice(-3)
+                    .reverse()
+                    .map((msg, index) => (
+                      <p key={`trans-${index}`} className="text-sm text-gray-900 dark:text-gray-100 font-medium mb-1">
+                        {msg.text}
+                      </p>
+                    ))}
+                  
+                  {/* Show speech transcripts from hearing user */}
+                  {transcriptMessages
+                    .filter((msg: any) => msg.isLocal === false)
+                    .slice(-3)
+                    .reverse()
+                    .map((msg, index) => (
+                      <p key={`speech-${index}`} className="text-sm text-white dark:text-white font-medium mb-1">
+                        {msg.text}
+                      </p>
+                    ))}
+                </>
               ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400 italic">Waiting...</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 italic">Waiting for their messages...</p>
               )}
             </div>
           </div>
@@ -501,15 +1016,19 @@ const CallModal = () => {
       <div className="flex-1 bg-white dark:bg-slate-900 p-4 overflow-y-auto relative">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What they're signing</h3>
         <div className="space-y-2">
-          {translationMessages.length > 0 ? (
-            translationMessages.map((msg, index) => (
-              <div key={index} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
-                <p className="text-sm text-slate-900 dark:text-white">{msg.text}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  {formatTimestamp(msg.timestamp)}
-                </p>
-              </div>
-            ))
+          {translationMessages.filter((msg: any) => msg.isLocal === false).length > 0 ? (
+            translationMessages
+              .filter((msg: any) => msg.isLocal === false)
+              .slice()
+              .reverse()
+              .map((msg, index) => (
+                <div key={index} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
+                  <p className="text-sm text-slate-900 dark:text-white">{msg.text}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {formatTimestamp(msg.timestamp)}
+                  </p>
+                </div>
+              ))
           ) : (
             <p className="text-slate-500 dark:text-slate-400 text-center py-8">
               Waiting for their signs...

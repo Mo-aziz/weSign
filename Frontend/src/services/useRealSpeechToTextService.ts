@@ -2,8 +2,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VoiceSettings } from './localTTS';
 import '../services/localSpeechRecognition';
 
-declare var SpeechRecognition: any;
-declare var webkitSpeechRecognition: any;
+type SpeechRecognitionEventResult = {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
+};
+
+type SpeechRecognitionEvent = {
+  resultIndex: number;
+  results: SpeechRecognitionEventResult[];
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: Record<string, unknown>) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+};
 
 type RealSpeechToTextOptions = {
   disableTTS?: boolean;
@@ -24,15 +43,15 @@ export const useRealSpeechToTextService = (options: RealSpeechToTextOptions = {}
   const [isTyping, setIsTyping] = useState(false);
   const [history, setHistory] = useState<TranscriptEntry[]>([]);
   
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const sentenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTranscriptRef = useRef('');
 
   // Initialize speech recognition
   useEffect(() => {
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
+      const SpeechRecognition = (window as unknown as Record<string, unknown>).webkitSpeechRecognition || (window as unknown as Record<string, unknown>).SpeechRecognition;
+      recognitionRef.current = new (SpeechRecognition as unknown as new () => SpeechRecognitionLike)();
       
       const recognition = recognitionRef.current;
       recognition.continuous = true;
@@ -45,7 +64,7 @@ export const useRealSpeechToTextService = (options: RealSpeechToTextOptions = {}
         setIsTyping(true);
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -67,7 +86,7 @@ export const useRealSpeechToTextService = (options: RealSpeechToTextOptions = {}
         }
       };
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: Record<string, unknown>) => {
         console.error('Speech recognition error:', event.error);
         if (event.error === 'no-speech') {
           console.log('No speech detected');
@@ -167,7 +186,7 @@ export const useRealSpeechToTextService = (options: RealSpeechToTextOptions = {}
 // Type declarations for Web Speech API
 declare global {
   interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
+    webkitSpeechRecognition: unknown;
+    SpeechRecognition: unknown;
   }
 }

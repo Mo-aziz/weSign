@@ -88,6 +88,24 @@ wss.on('connection', (ws, req) => {
           }
           break;
 
+        case 'user-update':
+          // Update user's type (e.g., when they change from deaf to hearing in settings)
+          if (userId && clients.has(userId)) {
+            const newIsDeaf = data.isDeaf;
+            const oldIsDeaf = clients.get(userId).isDeaf;
+            clients.get(userId).isDeaf = newIsDeaf;
+            console.log(`✓ Updated user type for ${username} (${userId}): ${oldIsDeaf ? 'Deaf' : 'Hearing'} → ${newIsDeaf ? 'Deaf' : 'Hearing'}`);
+            ws.send(JSON.stringify({
+              type: 'user-update-confirmed',
+              success: true,
+              userId: userId,
+              isDeaf: newIsDeaf
+            }));
+          } else {
+            console.warn(`⚠ Attempted to update user type for unknown/unregistered user`);
+          }
+          break;
+
         case 'call-invite':
         case 'call-accept':
         case 'call-reject':
