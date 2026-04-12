@@ -78,7 +78,6 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-// Use hardcoded network IP for remote connections
 const WS_URL = `wss://192.168.100.80:3001`;
 
 let ws: WebSocket | null = null;
