@@ -23,7 +23,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     hmr: {
-      host: '192.168.100.80',
+      host: '192.168.X.X',
       port: 1420,
       protocol: 'https',
     },
