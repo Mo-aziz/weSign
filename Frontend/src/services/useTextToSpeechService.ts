@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { speak as speakTTS, type VoiceSettings } from './localTTS';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/useAppContext';
 
 type SpeechQueueItem = {
   id: string;

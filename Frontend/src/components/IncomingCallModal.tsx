@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAppContext } from '../context/useAppContext';
 import type { CallData } from '../services/useCallService';
 
 interface IncomingCallModalProps {
@@ -12,7 +13,13 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   onAccept, 
   onReject 
 }) => {
+  const { user } = useAppContext();
+  
   if (!incomingCall) return null;
+  
+  // Validate: block hearing-to-hearing calls at UI level
+  const isHeartingToHearing = !incomingCall.caller.isDeaf && user && !user.isDeaf;
+  const canAcceptCall = !isHeartingToHearing;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -58,6 +65,17 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
             </p>
           </div>
 
+          {isHeartingToHearing && (
+            <div className="mb-6 rounded-2xl bg-rose-900/40 border border-rose-700 p-4">
+              <p className="text-sm text-rose-300 font-semibold">
+                ⚠️ This call cannot be accepted - hearing-to-hearing calls are not allowed.
+              </p>
+              <p className="text-xs text-rose-400 mt-2">
+                Please call or accept calls from Deaf or Hard of Hearing users.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-4">
             <button
               onClick={onReject}
@@ -73,7 +91,13 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
 
             <button
               onClick={onAccept}
-              className="flex-1 rounded-2xl bg-brand-600 px-6 py-4 font-semibold text-white transition hover:bg-brand-500"
+              disabled={!canAcceptCall}
+              className={`flex-1 rounded-2xl px-6 py-4 font-semibold transition ${
+                canAcceptCall 
+                  ? 'bg-brand-600 text-white hover:bg-brand-500' 
+                  : 'bg-slate-600 text-slate-400 cursor-not-allowed opacity-50'
+              }`}
+              title={!canAcceptCall ? 'Hearing-to-hearing calls are not allowed' : 'Accept call'}
             >
               <div className="flex items-center justify-center gap-2">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -18,6 +18,11 @@ dist-ssr/
 .env.*
 !.env.example
 
+# Certificates (each developer generates their own)
+certs/
+Frontend/certs/
+*.pem
+
 # Logs
 logs
 *.log

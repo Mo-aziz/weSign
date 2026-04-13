@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/useAppContext';
 import VoiceSettings from '../components/VoiceSettings';
 import { speak } from '../services/localTTS';
 import { updateUserTypeOnServer } from '../services/useCallService';
@@ -118,7 +118,7 @@ const Settings = () => {
                 <select
                   value={user?.isDeaf ? 'deaf' : 'hearing'}
                   disabled
-                  className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                  className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 appearance-none"
                 >
                   <option value="deaf">Deaf / Hard of Hearing</option>
                   <option value="hearing">Hearing</option>

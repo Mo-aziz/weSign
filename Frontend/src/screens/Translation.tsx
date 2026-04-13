@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/useAppContext';
 import { useSignRecognitionService } from '../services/useSignRecognitionService';
 import { useTextToSpeechService } from '../services/useTextToSpeechService';
 import { startSpeechRecognition, stopSpeechRecognition } from '../services/localSpeechRecognition';

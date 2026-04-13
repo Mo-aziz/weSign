@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/useAppContext';
 import { useSignRecognitionService } from '../services/useSignRecognitionService';
 import { startSpeechRecognition, stopSpeechRecognition } from '../services/localSpeechRecognition';
+
+// Type definitions for message objects
+type TranslationMessage = { text: string; timestamp: number; shouldSpeak: boolean; isLocal?: boolean };
+type TranscriptMessage = { text: string; timestamp: number; shouldSpeak: boolean; isLocal?: boolean };
 
 const formatTimestamp = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
 
@@ -298,7 +302,7 @@ const CallModal = () => {
     // Only auto-restart if the mic is supposed to be on
     if (!isMicListeningRef.current) return;
 
-    console.log('🔄 Auto-restarting speech recognition after browser timeout');
+    console.log(' Auto-restarting speech recognition after browser timeout');
     try {
       await startSpeechRecognition(
         {
@@ -349,7 +353,7 @@ const CallModal = () => {
           onEnd: (isManualStop) => {
             // If auto-timeout and mic should still be on, restart again
             if (!isManualStop && isMicListeningRef.current) {
-              console.log('🔄 Speech recognition ended by timeout again, restarting...');
+              console.log('Speech recognition ended by timeout again, restarting...');
               setTimeout(() => {
                 autoRestartSpeechRecognitionOnTimeout();
               }, 100);
@@ -358,7 +362,7 @@ const CallModal = () => {
         }
       );
     } catch (error) {
-      console.error('❌ Failed to auto-restart speech recognition:', error);
+      console.error(' Failed to auto-restart speech recognition:', error);
     }
   }, [startSpeechRecognition, sendTranscript]);
 
@@ -369,7 +373,7 @@ const CallModal = () => {
 
     // Find received messages with shouldSpeak = true that we haven't spoken yet
     const receivedMessages = translationMessages.filter(
-      (msg: any) => msg.isLocal === false && msg.shouldSpeak === true
+      (msg: TranslationMessage) => msg.isLocal === false && msg.shouldSpeak === true
     );
 
     if (receivedMessages.length === 0) return;
@@ -384,7 +388,7 @@ const CallModal = () => {
 
     // Mark as spoken
     spokenReceivedMessagesRef.current.add(lastReceivedMessage.timestamp);
-    console.log('🔊 Playing TTS for received translation:', lastReceivedMessage.text);
+    console.log(' Playing TTS for received translation:', lastReceivedMessage.text);
 
     // Pause microphone to avoid TTS feedback
     if (isMicListening) {
@@ -405,11 +409,11 @@ const CallModal = () => {
     // Smart voice selection with gender + language awareness
     const voices = window.speechSynthesis.getVoices();
     
-    console.log(`📢 [TTS] User voice settings: ${user?.voiceSettings?.voiceName || 'NOT SET'} | Available voices: ${voices.length}`);
+    console.log(` [TTS] User voice settings: ${user?.voiceSettings?.voiceName || 'NOT SET'} | Available voices: ${voices.length}`);
     
     if (user?.voiceSettings?.voiceName && voices.length > 0) {
       const requestedVoiceName = user.voiceSettings.voiceName;
-      console.log(`🎯 [TTS] Attempting to find voice: "${requestedVoiceName}"`);
+      console.log(` [TTS] Attempting to find voice: "${requestedVoiceName}"`);
       
       // Helper function to detect gender from voice name
       const detectGender = (voiceName: string): 'female' | 'male' | 'neutral' => {
@@ -510,18 +514,18 @@ const CallModal = () => {
       
       const requestedLang = getLanguageCode(requestedVoiceName);
       
-      console.log(`🎤 Voice matching: "${requestedVoiceName}" | Gender: ${requestedGender} | Lang: ${requestedLang}`);
+      console.log(` Voice matching: "${requestedVoiceName}" | Gender: ${requestedGender} | Lang: ${requestedLang}`);
       
       // Priority 1: Exact match
       let selectedVoice = voices.find(v => v.name === requestedVoiceName);
       if (selectedVoice) {
-        console.log(`✅ Priority 1 (Exact): Found "${selectedVoice.name}"`);
+        console.log(` Priority 1 (Exact): Found "${selectedVoice.name}"`);
         utterance.voice = selectedVoice;
       } else {
         // Priority 2: Case-insensitive / partial match
         selectedVoice = voices.find(v => v.name.toLowerCase() === requestedVoiceName.toLowerCase());
         if (selectedVoice) {
-          console.log(`✅ Priority 2 (Partial): Found "${selectedVoice.name}"`);
+          console.log(` Priority 2 (Partial): Found "${selectedVoice.name}"`);
           utterance.voice = selectedVoice;
         } else if (requestedLang) {
           // Priority 3: Same language + same gender
@@ -530,13 +534,13 @@ const CallModal = () => {
             return voiceLang === requestedLang && detectGender(v.name) === requestedGender;
           });
           if (selectedVoice) {
-            console.log(`✅ Priority 3 (Same Lang + Gender): Found "${selectedVoice.name}"`);
+            console.log(` Priority 3 (Same Lang + Gender): Found "${selectedVoice.name}"`);
             utterance.voice = selectedVoice;
           } else {
             // Priority 4: Same language + any gender
             selectedVoice = voices.find(v => getLanguageCode(v.name) === requestedLang);
             if (selectedVoice) {
-              console.log(`✅ Priority 4 (Same Lang): Found "${selectedVoice.name}"`);
+              console.log(` Priority 4 (Same Lang): Found "${selectedVoice.name}"`);
               utterance.voice = selectedVoice;
             } else {
               // Priority 5: English + same gender
@@ -545,18 +549,18 @@ const CallModal = () => {
                 return voiceLang?.startsWith('en') && detectGender(v.name) === requestedGender;
               });
               if (selectedVoice) {
-                console.log(`✅ Priority 5 (English + Gender): Found "${selectedVoice.name}"`);
+                console.log(` Priority 5 (English + Gender): Found "${selectedVoice.name}"`);
                 utterance.voice = selectedVoice;
               } else {
                 // Priority 6: English (any gender)
                 selectedVoice = voices.find(v => getLanguageCode(v.name)?.startsWith('en'));
                 if (selectedVoice) {
-                  console.log(`✅ Priority 6 (English): Found "${selectedVoice.name}"`);
+                  console.log(` Priority 6 (English): Found "${selectedVoice.name}"`);
                   utterance.voice = selectedVoice;
                 } else {
                   // Priority 7: Any available voice
                   selectedVoice = voices[0];
-                  console.log(`✅ Priority 7 (Default): Using "${selectedVoice?.name}"`);
+                  console.log(` Priority 7 (Default): Using "${selectedVoice?.name}"`);
                   utterance.voice = selectedVoice || undefined;
                 }
               }
@@ -566,10 +570,10 @@ const CallModal = () => {
           // If no language detected, try gender match or default
           selectedVoice = voices.find(v => detectGender(v.name) === requestedGender);
           if (selectedVoice) {
-            console.log(`✅ Priority (Gender Match): Found "${selectedVoice.name}"`);
+            console.log(` Priority (Gender Match): Found "${selectedVoice.name}"`);
             utterance.voice = selectedVoice;
           } else {
-            console.log(`✅ Priority (Default): Using first available voice`);
+            console.log(` Priority (Default): Using first available voice`);
             utterance.voice = voices[0] || undefined;
           }
         }
@@ -577,25 +581,25 @@ const CallModal = () => {
     } else {
       // Voice settings not available or no voices loaded
       if (!user?.voiceSettings?.voiceName) {
-        console.warn(`⚠️ [TTS] No voice settings configured. Using system default.`);
+        console.warn(` [TTS] No voice settings configured. Using system default.`);
       }
       if (voices.length === 0) {
-        console.warn(`⚠️ [TTS] No voices available yet (${voices.length} voices)`);
+        console.warn(` [TTS] No voices available yet (${voices.length} voices)`);
       }
     }
 
     // Log the final voice being used
-    console.log(`📡 [TTS] Final voice: ${utterance.voice?.name || 'SYSTEM DEFAULT'}`);
+    console.log(` [TTS] Final voice: ${utterance.voice?.name || 'SYSTEM DEFAULT'}`);
     if (utterance.voice) {
       console.log(`  → Lang: ${utterance.voice.lang}, Local: ${utterance.voice.localService}`);
     }
 
     utterance.onend = () => {
-      console.log('🔊 TTS completed for received translation');
+      console.log(' TTS completed for received translation');
       
       // Resume microphone if we paused it
       if (isMicPausedRef.current && pausedMessageTimestampRef.current === lastReceivedMessage.timestamp) {
-        console.log('✅ [Auto-TTS] Attempting to resume speech recognition after TTS end');
+        console.log(' [Auto-TTS] Attempting to resume speech recognition after TTS end');
         
         // Clear any pending timeouts
         if (ttsResumeTimeoutRef.current) {
@@ -611,7 +615,7 @@ const CallModal = () => {
         
         // Resume with slight delay to ensure speech synthesis fully stopped
         ttsResumeTimeoutRef.current = setTimeout(async () => {
-          console.log('🎙️ Resuming microphone after TTS');
+          console.log(' Resuming microphone after TTS');
           try {
             setIsMicListening(true);
             await startSpeechRecognition(
@@ -667,7 +671,7 @@ const CallModal = () => {
                     setIsMicListening(false);
                   } else if (isMicListeningRef.current) {
                     // Auto-restart on browser timeout
-                    console.log('🔄 Browser timeout after TTS resume, auto-restarting');
+                    console.log(' Browser timeout after TTS resume, auto-restarting');
                     setTimeout(() => {
                       autoRestartSpeechRecognitionOnTimeout();
                     }, 100);
@@ -677,7 +681,7 @@ const CallModal = () => {
               }
             );
           } catch (error) {
-            console.error('❌ Failed to resume microphone after TTS:', error);
+            console.error(' Failed to resume microphone after TTS:', error);
             setIsMicListening(false);
           }
         }, 100);
@@ -685,7 +689,7 @@ const CallModal = () => {
         // Safety timeout: force microphone open if resume hasn't happened after 3 seconds
         ttsSafetyTimeoutRef.current = setTimeout(() => {
           if (!isMicListeningRef.current && isMicPausedRef.current === false) {
-            console.log('⚠️ [Auto-TTS] SAFETY TIMEOUT: Forcing microphone open after 3 seconds');
+            console.log(' [Auto-TTS] SAFETY TIMEOUT: Forcing microphone open after 3 seconds');
             // Force toggle the mic open
             setIsMicListening(true);
             handleMicToggle().catch(err => console.error('Safety timeout: Failed to open mic:', err));
@@ -695,17 +699,17 @@ const CallModal = () => {
     };
 
     utterance.onerror = (event) => {
-      console.error('🔊 TTS error:', event);
+      console.error('TTS error:', event);
       
       // Resume microphone on error too
       if (isMicPausedRef.current && pausedMessageTimestampRef.current === lastReceivedMessage.timestamp) {
-        console.log('✅ [Auto-TTS] Resuming after TTS error');
+        console.log(' [Auto-TTS] Resuming after TTS error');
         
         isMicPausedRef.current = false;
         pausedMessageTimestampRef.current = null;
         
         setTimeout(async () => {
-          console.log('🎙️ Resuming microphone after TTS error');
+          console.log(' Resuming microphone after TTS error');
           try {
             setIsMicListening(true);
             await startSpeechRecognition(
@@ -761,7 +765,7 @@ const CallModal = () => {
                     setIsMicListening(false);
                   } else if (isMicListeningRef.current) {
                     // Auto-restart on browser timeout
-                    console.log('🔄 Browser timeout in TTS error recovery, auto-restarting');
+                    console.log(' Browser timeout in TTS error recovery, auto-restarting');
                     setTimeout(() => {
                       autoRestartSpeechRecognitionOnTimeout();
                     }, 100);
@@ -771,7 +775,7 @@ const CallModal = () => {
               }
             );
           } catch (error) {
-            console.error('❌ Failed to resume microphone after TTS error:', error);
+            console.error(' Failed to resume microphone after TTS error:', error);
             setIsMicListening(false);
           }
         }, 100);
@@ -801,14 +805,14 @@ const CallModal = () => {
       if (currentCall) {
         const otherUser = currentCall.caller.id === user?.id ? currentCall.callee : currentCall.caller;
         shouldSpeakToOtherUser = !otherUser.isDeaf; // Flag for receiver - they will speak it
-        console.log(`🔊 Call type check: other user "${otherUser.username}" isDeaf=${otherUser.isDeaf} → shouldSpeak=${shouldSpeakToOtherUser}`);
+        console.log(` Call type check: other user "${otherUser.username}" isDeaf=${otherUser.isDeaf} → shouldSpeak=${shouldSpeakToOtherUser}`);
       }
       
       // Send translation with appropriate shouldSpeak flag (receiver will play TTS)
       sendTranslation(entry.text, shouldSpeakToOtherUser);
       
       // DO NOT play audio on sender side - receiver will handle TTS
-      console.log('✅ Translation sent, receiver will handle TTS if needed');
+      console.log(' Translation sent, receiver will handle TTS if needed');
     }
   }, [signService, sendTranslation, user?.voiceSettings, user?.id, currentCall]);
 
@@ -820,7 +824,7 @@ const CallModal = () => {
     }
     
     // Cleanup TTS and mic pause refs
-    console.log('🧹 Cleaning up TTS and microphone refs on call end');
+    console.log(' Cleaning up TTS and microphone refs on call end');
     if (ttsResumeTimeoutRef.current) {
       clearTimeout(ttsResumeTimeoutRef.current);
       ttsResumeTimeoutRef.current = null;
@@ -882,7 +886,7 @@ const CallModal = () => {
         {/* End call button - X style at lower part of camera */}
         <button
           onClick={endCall}
-          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors"
+          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -936,11 +940,11 @@ const CallModal = () => {
           <div>
             <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">What they're saying</p>
             <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 min-h-[60px] max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-700">
-              {translationMessages.filter((msg: any) => msg.isLocal === false).length > 0 || transcriptMessages.filter((msg: any) => msg.isLocal === false).length > 0 ? (
+              {translationMessages.filter((msg: TranslationMessage) => msg.isLocal === false).length > 0 || transcriptMessages.filter((msg: TranscriptMessage) => msg.isLocal === false).length > 0 ? (
                 <>
                   {/* Show sign translations from other user */}
                   {translationMessages
-                    .filter((msg: any) => msg.isLocal === false)
+                    .filter((msg: TranslationMessage) => msg.isLocal === false)
                     .slice(-3)
                     .reverse()
                     .map((msg, index) => (
@@ -951,11 +955,11 @@ const CallModal = () => {
                   
                   {/* Show speech transcripts from hearing user */}
                   {transcriptMessages
-                    .filter((msg: any) => msg.isLocal === false)
+                    .filter((msg: TranscriptMessage) => msg.isLocal === false)
                     .slice(-3)
                     .reverse()
                     .map((msg, index) => (
-                      <p key={`speech-${index}`} className="text-sm text-white dark:text-white font-medium mb-1">
+                      <p key={`speech-${index}`} className="text-sm text-black dark:text-white font-medium mb-1">
                         {msg.text}
                       </p>
                     ))}
@@ -969,7 +973,7 @@ const CallModal = () => {
           <button
             onClick={() => handleConfirmTranslation(previewText)}
             disabled={!previewText}
-            className="w-full rounded-lg bg-blue-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full rounded-lg bg-blue-500 dark:bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirm & Speak
           </button>
@@ -1016,9 +1020,9 @@ const CallModal = () => {
       <div className="flex-1 bg-white dark:bg-slate-900 p-4 overflow-y-auto relative">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What they're signing</h3>
         <div className="space-y-2">
-          {translationMessages.filter((msg: any) => msg.isLocal === false).length > 0 ? (
+          {translationMessages.filter((msg: TranslationMessage) => msg.isLocal === false).length > 0 ? (
             translationMessages
-              .filter((msg: any) => msg.isLocal === false)
+              .filter((msg: TranslationMessage) => msg.isLocal === false)
               .slice()
               .reverse()
               .map((msg, index) => (
@@ -1039,7 +1043,7 @@ const CallModal = () => {
         {/* End call button - X style at lower part of hearing interface */}
         <button
           onClick={endCall}
-          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors"
+          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1072,7 +1076,7 @@ const CallModal = () => {
       <div className="h-[calc(100vh-32px)]">
         {callState === 'calling' ? (
           // Calling state - show connecting UI
-          <div className="h-full flex flex-col items-center justify-center text-white">
+          <div className="h-full flex flex-col items-center justify-center text-white call-connecting-state">
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white text-4xl font-bold mb-8">
               {currentCall?.callee?.username?.charAt(0).toUpperCase() || '?'}
             </div>
@@ -1084,7 +1088,7 @@ const CallModal = () => {
             {/* End call button - X style at bottom of calling screen */}
             <button
               onClick={endCall}
-              className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors"
+              className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

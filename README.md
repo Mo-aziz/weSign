@@ -181,12 +181,11 @@ sign-language-react-v2/
 │   │   ├── services/
 │   │   │   ├── useCallService.ts         # WebRTC peer connection & signaling
 │   │   │   ├── useSignRecognitionService.ts  # Sign recognition
-│   │   │   ├── usePersistentMic.ts       # Microphone auto-control
 │   │   │   ├── localSpeechRecognition.ts # Web Speech API wrapper
 │   │   │   ├── localTTS.ts               # Text-to-speech (Web Speech API)
-│   │   │   └── voiceUtils.ts             # Voice matching & gender detection
+│   │   │   └── useTextToSpeechService.ts # TTS queue management
 │   │   ├── theme/
-│   │   │   └── materialTheme.ts          # Theme configuration
+│   │   │   └── (Theming via Tailwind - no separate theme files)
 │   │   ├── App.tsx                       # Root component & routing
 │   │   ├── main.tsx                      # React app entry point
 │   │   └── index.css                     # Global styles
@@ -197,16 +196,17 @@ sign-language-react-v2/
 │   │   ├── src/main.rs                   # Tauri app initialization
 │   │   └── tts_service/                  # Python TTS service (optional)
 │   │
+│   ├── signaling-server.js               # WebSocket signaling server
+│   ├── certs/                            # HTTPS certificates
+│   ├── scripts/
+│   │   └── generate-certs.js             # HTTPS certificate generator
 │   ├── package.json                      # Npm dependencies & scripts
 │   ├── vite.config.ts                    # Vite build configuration
 │   ├── tailwind.config.js                # TailwindCSS config
 │   ├── tsconfig.json                     # TypeScript configuration
 │   └── eslint.config.js                  # ESLint configuration
 │
-├── signaling-server.js                   # WebSocket signaling server
-├── .gitignore                            # Git ignore rules (includes build artifacts)
-├── generate-certs.js                     # HTTPS certificate generator
-├── cert-generator.js                     # Certificate generation helper
+├── .gitignore                            # Git ignore rules
 └── README.md                             # This file
 ```
 
@@ -314,9 +314,14 @@ npm install
 added 1,234 packages in 4m
 ```
 
-### Step 3: Generate HTTPS Certificates (CRITICAL)
+### Step 3: Generate HTTPS Certificates (CRITICAL - REQUIRED FOR EVERY DEVELOPER)
 
-** IMPORTANT:** The app requires HTTPS certificates before it can run. You must generate them:
+**IMPORTANT SECURITY NOTE:** The `certs/` folder is **NOT** in the repository. Each developer must generate their own self-signed certificates locally. This is a security best practice:
+- Private keys (key.pem) should never be committed
+- Each development environment has unique certificates
+- Production certificates are completely separate
+
+You must generate certificates before running the app:
 
 #### Option A: Using Node.js (Recommended - No External Tools Needed)
 
@@ -1028,12 +1033,12 @@ npx tauri --version
 #### Issue 6: Signaling server connection fails
 **Error:** "Connection refused on port 3001" or "Failed to connect to wss://localhost:3001"  
 **Solution:**
-1. Ensure server is running: `npm run server` (in separate terminal)
+1. Ensure server is running: `npm run server` (in Frontend folder, separate terminal)
 2. Check server is listening:
    ```powershell
    Get-NetTCPConnection -LocalPort 3001 -State Listen
    ```
-3. If port 3001 in use, change in `signaling-server.js`:
+3. If port 3001 in use, change in `Frontend/signaling-server.js`:
    ```javascript
    const PORT = process.env.PORT || 3001;  // Change to another port
    ```

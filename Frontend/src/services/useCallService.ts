@@ -78,7 +78,7 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-const WS_URL = `wss://192.168.X.X:3001`;
+const WS_URL = `wss://192.168.100.80:3001`;
 
 let ws: WebSocket | null = null;
 const messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();

@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "server": "node ../signaling-server.js"
+    "server": "node signaling-server.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",
@@ -28,7 +28,7 @@
     "@tauri-apps/cli": "^1.5.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.56.0",

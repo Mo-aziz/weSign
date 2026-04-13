@@ -49,14 +49,25 @@ html:not(.dark) .text-white {
   color: #6d28d9 !important;
 }
 
-/* Keep contrast on purple brand surfaces */
+/* Keep contrast on purple brand surfaces, blue buttons, calling state, and end call buttons */
 html:not(.dark) [class*='bg-brand-'] .text-white,
-html:not(.dark) [class*='bg-brand-'][class*='text-white'] {
+html:not(.dark) [class*='bg-brand-'][class*='text-white'],
+html:not(.dark) [class*='bg-blue-'][class*='text-white'],
+html:not(.dark) .call-connecting-state .text-white,
+html:not(.dark) .call-connecting-state,
+html:not(.dark) .end-call-button .text-white,
+html:not(.dark) .end-call-button,
+html:not(.dark) .end-call-button svg {
   color: #fff !important;
 }
 
 html:not(.dark) [class*='text-slate-'],
 html:not(.dark) [class*='text-gray-'] {
+  color: #000 !important;
+}
+
+/* Feedback messages should be black in light theme */
+html:not(.dark) .feedback-message {
   color: #000 !important;
 }
 

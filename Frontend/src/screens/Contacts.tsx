@@ -1,8 +1,8 @@
 import { type FormEvent, useMemo, useState, useEffect } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/useAppContext';
 
 const Contacts = () => {
-  const { contacts, addContact, removeContact, user, initiateCall, callState, darkMode } = useAppContext();
+  const { contacts, addContact, removeContact, user, initiateCall, callState } = useAppContext();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('info');
@@ -120,11 +120,11 @@ const Contacts = () => {
             </button>
           </form>
           {feedback && (
-            <div className={`mt-4 rounded-lg p-3 text-sm ${
+            <div className={`mt-4 rounded-lg p-3 text-sm feedback-message ${
               feedbackType === 'success' ? 'bg-green-500/20 text-green-100' : 
               feedbackType === 'error' ? 'bg-red-500/30 text-red-100 border border-red-500/50' : 
               'bg-blue-500/20'
-            } ${darkMode ? '' : 'text-black'}`}>
+            }`}>
               {feedback}
             </div>
           )}
