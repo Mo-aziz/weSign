@@ -154,7 +154,7 @@ wss.on('connection', (ws, req) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✓ Signaling server running on WSS port ${PORT}`);
   console.log(`✓ Both HTTP and WSS available (WSS for remote clients)`);
-  console.log(`✓ Access via: wss://192.168.100.80:${PORT}/\n`);
+  console.log(`✓ Access via: wss://192.168.X.X:${PORT}/\n`);
 });
 
 // Handle graceful shutdown
