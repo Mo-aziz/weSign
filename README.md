@@ -2,33 +2,6 @@
 
 A modern desktop application that enables seamless communication between deaf and hearing individuals using video calls, real-time translation, and intelligent sign/speech recognition.
 
----
-
-## ✅ INTEGRATION SCAN COMPLETE
-
-**Status:** ✅ All Issues Fixed - Ready for Deployment  
-**Scan Date:** April 2026  
-**Result:** 3 Issues Found → 2 FIXED ✅ + 1 Clarified ✓
-
-### Critical Fixes Applied
-- ✅ **Token Refresh** - Now accepts token from Authorization header (previously failed after 15 min)
-- ✅ **WebSocket Server URL** - Now dynamically detected (previously hardcoded to single IP)
-- ✓ **Call Architecture** - Verified WebSocket design is correct (not an issue)
-
-### Documentation Generated
-8 comprehensive guides created:
-- **INTEGRATION_SUMMARY.md** - Quick 5-minute overview ⭐ START HERE
-- **INTEGRATION_SCAN_REPORT.md** - Detailed findings
-- **INTEGRATION_FIXES_APPLIED.md** - What was fixed
-- **COMPLETE_ENDPOINT_MAP.md** - Full API reference
-- **INTEGRATION_SETUP_GUIDE.md** - Complete setup
-- **QUICK_REFERENCE.md** - Cheat sheet
-- **INTEGRATION_VALIDATION.md** - Testing guide
-- **DOCUMENTATION_INDEX.md** - Navigation guide
-
-**Next Step:** See [Integration Status](#integration-status) section below.
-
----
 
 ##  Table of Contents
 
@@ -69,7 +42,6 @@ A modern desktop application that enables seamless communication between deaf an
 
  **Microphone Auto-Control**
 - Automatic pause/resume of microphone during text-to-speech
-- 3-second safety fallback ensures microphone always resumes
 - Prevents audio feedback loops while maintaining seamless experience
 
 ---
@@ -189,51 +161,113 @@ The app uses **WebRTC** for peer-to-peer video/audio streaming and a **WebSocket
 ## Project Structure
 
 ```
-sign-language-react-v2/
-├── Frontend/                             # All frontend code and build config
-│   ├── src/                              # React frontend source
+weSign/
+├── README.md                             # Project documentation
+│
+├── Backend full/                         # Node.js backend server
+│   ├── server.js                         # Express server entry point
+│   ├── package.json                      # Backend dependencies
+│   ├── README.md                         # Backend documentation
+│   ├── src/
+│   │   ├── app.js                        # Express app configuration
+│   │   ├── config/
+│   │   │   └── db.js                     # Database connection configuration
+│   │   ├── controllers/
+│   │   │   ├── user.controller.js        # User management logic
+│   │   │   ├── call.controller.js        # Call session management
+│   │   │   └── conversation.controller.js # Message conversation handling
+│   │   ├── models/
+│   │   │   ├── user.model.js             # User database schema
+│   │   │   ├── callSession.model.js      # Call session schema
+│   │   │   └── conversation.model.js     # Message conversation schema
+│   │   ├── routes/
+│   │   │   ├── index.js                  # Main routes aggregator
+│   │   │   ├── user.routes.js            # User authentication & profile routes
+│   │   │   ├── call.routes.js            # Call management routes
+│   │   │   └── conversation.routes.js    # Conversation message routes
+│   │   ├── middleware/
+│   │   │   ├── auth.js                   # JWT authentication middleware
+│   │   │   └── authValidation.js         # Request validation middleware
+│   │   ├── realtime/
+│   │   │   └── socket.js                 # WebSocket/Socket.io configuration
+│   │   ├── services/
+│   │   │   └── notifications.js          # Notification service
+│   │   ├── utils/
+│   │   │   └── tokens.js                 # JWT token utilities
+│   │   └── views/
+│   │       └── user.view.js              # User response formatting
+│
+├── Frontend/                             # React + Tauri frontend application
+│   ├── package.json                      # Frontend dependencies & scripts
+│   ├── index.html                        # HTML entry point
+│   ├── vite.config.ts                    # Vite build configuration
+│   ├── tsconfig.json                     # TypeScript configuration
+│   ├── tsconfig.app.json                 # App-specific TypeScript config
+│   ├── tsconfig.node.json                # Node-specific TypeScript config
+│   ├── tailwind.config.js                # TailwindCSS configuration
+│   ├── postcss.config.js                 # PostCSS configuration
+│   ├── eslint.config.js                  # ESLint linting rules
+│   ├── signaling-server.js               # WebSocket signaling server
+│   │
+│   ├── src/                              # React frontend source code
+│   │   ├── main.tsx                      # React app entry point
+│   │   ├── App.tsx                       # Root component & routing
+│   │   ├── App.css                       # App global styles
+│   │   ├── index.css                     # Global CSS
+│   │   ├── assets/
+│   │   │   └── react.svg                 # React logo asset
 │   │   ├── context/
-│   │   │   └── AppContext.tsx            # Global state management (user, calls, theme)
+│   │   │   ├── AppContext.tsx            # Global state management (user, calls, theme)
+│   │   │   ├── appContextValue.ts        # Context value types
+│   │   │   └── useAppContext.ts          # Context hook
 │   │   ├── screens/
-│   │   │   ├── Login.tsx                 # User authentication
+│   │   │   ├── Login.tsx                 # User authentication screen
 │   │   │   ├── Contacts.tsx              # Contact list & call initiation
 │   │   │   ├── Translation.tsx           # Sign/speech practice & preview
-│   │   │   └── Settings.tsx              # User profile & preferences
+│   │   │   └── Settings.tsx              # User profile & voice preferences
 │   │   ├── components/
-│   │   │   ├── CallModal.tsx             # In-call UI & communication
+│   │   │   ├── AuthenticatedLayout.tsx   # Navigation layout wrapper
+│   │   │   ├── CallModal.tsx             # In-call UI & communication display
 │   │   │   ├── IncomingCallModal.tsx     # Incoming call notification
-│   │   │   ├── AuthenticatedLayout.tsx   # Navigation layout
-│   │   │   └── VoiceSettings.tsx         # Voice configuration UI
-│   │   ├── services/
-│   │   │   ├── useCallService.ts         # WebRTC peer connection & signaling
-│   │   │   ├── useSignRecognitionService.ts  # Sign recognition
-│   │   │   ├── localSpeechRecognition.ts # Web Speech API wrapper
-│   │   │   ├── localTTS.ts               # Text-to-speech (Web Speech API)
-│   │   │   └── useTextToSpeechService.ts # TTS queue management
-│   │   ├── theme/
-│   │   │   └── (Theming via Tailwind - no separate theme files)
-│   │   ├── App.tsx                       # Root component & routing
-│   │   ├── main.tsx                      # React app entry point
-│   │   └── index.css                     # Global styles
+│   │   │   ├── VoiceSettings.tsx         # Voice configuration UI
+│   │   │   └── ErrorBoundary.tsx         # Error handling component
+│   │   └── services/
+│   │       ├── apiClient.ts              # HTTP API client with auth
+│   │       ├── userService.ts            # User API endpoints
+│   │       ├── contactService.ts         # Contact API endpoints
+│   │       ├── useCallService.ts         # WebRTC peer connection & signaling
+│   │       ├── useSignRecognitionService.ts # Sign language recognition logic
+│   │       ├── useTextToSpeechService.ts # Text-to-speech queue management
+│   │       ├── localSpeechRecognition.ts # Web Speech API wrapper
+│   │       └── localTTS.ts               # Text-to-speech implementation
 │   │
-│   ├── src-tauri/                        # Tauri desktop app backend
-│   │   ├── tauri.conf.json               # Tauri configuration
-│   │   ├── Cargo.toml                    # Rust dependencies
-│   │   ├── src/main.rs                   # Tauri app initialization
-│   │   └── tts_service/                  # Python TTS service (optional)
+│   ├── src-tauri/                        # Tauri desktop app configuration
+│   │   ├── tauri.conf.json               # Tauri app configuration
+│   │   ├── Cargo.toml                    # Rust/Tauri dependencies
+│   │   ├── Cargo.lock                    # Locked Rust dependencies
+│   │   ├── build.rs                      # Tauri build script
+│   │   ├── src/
+│   │   │   └── main.rs                   # Tauri app Rust entry point
+│   │   ├── icons/
+│   │   │   └── icon.ico                  # Application icon
+│   │   ├── bin/
+│   │   │   └── start_tts.py              # TTS service launcher
+│   │   ├── tts_service/
+│   │   │   ├── tts_server.py             # Python TTS server implementation
+│   │   │   └── requirements.txt          # Python dependencies
+│   │   └── gen/
+│   │       └── schemas/                  # Generated Tauri schemas
+│   │           ├── acl-manifests.json
+│   │           ├── capabilities.json
+│   │           ├── desktop-schema.json
+│   │           └── windows-schema.json
 │   │
-│   ├── signaling-server.js               # WebSocket signaling server
 │   ├── certs/                            # HTTPS certificates
+│   ├── public/                           # Static public assets
 │   ├── scripts/
-│   │   └── generate-certs.js             # HTTPS certificate generator
-│   ├── package.json                      # Npm dependencies & scripts
-│   ├── vite.config.ts                    # Vite build configuration
-│   ├── tailwind.config.js                # TailwindCSS config
-│   ├── tsconfig.json                     # TypeScript configuration
-│   └── eslint.config.js                  # ESLint configuration
+│   │   └── generate-certs.js             # Certificate generation script
 │
-├── .gitignore                            # Git ignore rules
-└── README.md                             # This file
+└── .gitignore                            # Git ignore rules
 ```
 
 ---
