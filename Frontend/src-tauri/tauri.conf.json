@@ -1,0 +1,44 @@
+{
+  "package": {
+    "productName": "Sign Language Communicator",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "targets": "all",
+      "identifier": "com.signlanguage.communicator",
+      "icon": [
+        "icons/icon.ico"
+      ],
+      "windows": {
+        "webviewInstallMode": {
+          "type": "downloadBootstrapper",
+          "silent": false
+        }
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sign Language Communicator",
+        "width": 430,
+        "height": 750,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "visible": true
+      }
+    ]
+  },
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "https://ZUKSH-LAP:1420",
+    "distDir": "../dist"
+  }
+}

@@ -1,0 +1,41 @@
+﻿# Tauri
+src-tauri/target/
+Frontend/src-tauri/target/
+src-tauri/**/*.pdb
+src-tauri/**/*.rlib
+src-tauri/**/*.rmeta
+Frontend/src-tauri/**/*.pdb
+Frontend/src-tauri/**/*.rlib
+Frontend/src-tauri/**/*.rmeta
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Certificates (each developer generates their own)
+certs/
+Frontend/certs/
+*.pem
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
