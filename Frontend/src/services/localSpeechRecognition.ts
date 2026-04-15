@@ -85,14 +85,19 @@ export type SpeechRecognitionCallbacks = {
   onResult?: (result: SpeechRecognitionCallbackResult) => void;
   onError?: (error: Error) => void;
   onEnd?: (isManualStop: boolean) => void;
+  onNetworkError?: (retryCount: number, maxRetries: number) => void;
 };
 
 let recognitionInstance: SpeechRecognition | null = null;
 let wasManuallyStopped = false; // Track if stop was manual vs automatic timeout
+let networkErrorRetryCount = 0;
+const MAX_NETWORK_ERROR_RETRIES = 5;
+
+export type NetworkErrorRetryCallback = (retryCount: number, maxRetries: number) => void;
 
 export const startSpeechRecognition = (
   options: SpeechRecognitionOptions = {},
-  callbacks: SpeechRecognitionCallbacks = {}
+  callbacks: SpeechRecognitionCallbacks & { onNetworkError?: NetworkErrorRetryCallback } = {}
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (!isSpeechRecognitionSupported()) {
@@ -149,13 +154,32 @@ export const startSpeechRecognition = (
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // Don't treat intentional aborts or recoverable errors as failures
+      // Handle recoverable errors that should be ignored
       if (event.error === 'aborted' || event.error === 'no-speech' || event.error === 'audio-capture') {
         console.log(`🎤 Recoverable speech recognition error (ignored): ${event.error}`);
         return;
       }
       
+      // Handle network errors specially - these are temporary and should be retried
+      if (event.error === 'network' || event.error === 'service-unavailable') {
+        networkErrorRetryCount++;
+        console.warn(`⚠️ Temporary network error (attempt ${networkErrorRetryCount}/${MAX_NETWORK_ERROR_RETRIES}):`, event.error);
+        
+        if (networkErrorRetryCount < MAX_NETWORK_ERROR_RETRIES) {
+          // Signal the retry attempt to any listeners
+          callbacks.onNetworkError?.(networkErrorRetryCount, MAX_NETWORK_ERROR_RETRIES);
+          // Don't reject - let onEnd handle the retry
+          return;
+        } else {
+          // Max retries exceeded, now it's a real error
+          console.error(`❌ Network error exceeded max retries (${MAX_NETWORK_ERROR_RETRIES})`);
+          networkErrorRetryCount = 0;
+        }
+      }
+      
+      // All other errors are fatal
       const error = new Error(`Speech recognition error: ${event.error}`);
+      networkErrorRetryCount = 0; // Reset counter on fatal error
       callbacks.onError?.(error);
       reject(error);
     };
@@ -170,6 +194,7 @@ export const startSpeechRecognition = (
       recognition.start();
     } catch (error) {
       recognitionInstance = null;
+      networkErrorRetryCount = 0;
       const err = error instanceof Error ? error : new Error('Failed to start speech recognition');
       callbacks.onError?.(err);
       reject(err);

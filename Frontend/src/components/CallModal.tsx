@@ -90,6 +90,7 @@ const CallModal = () => {
   const [previewEditMode, setPreviewEditMode] = useState(false);
   const [previewEditText, setPreviewEditText] = useState('');
   const recognitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const networkErrorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastFinalTranscriptRef = useRef('');
 
@@ -135,6 +136,9 @@ const CallModal = () => {
       lastFinalTranscriptRef.current = '';
       if (recognitionTimeoutRef.current) {
         clearTimeout(recognitionTimeoutRef.current);
+      }
+      if (networkErrorRetryRef.current) {
+        clearTimeout(networkErrorRetryRef.current);
       }
     } else {
       setIsMicListening(true);
@@ -193,9 +197,32 @@ const CallModal = () => {
               }
             },
             onError: (error) => {
-              console.error('Speech recognition error:', error);
+              console.error('Speech recognition error (fatal):', error);
               setIsMicListening(false);
               lastFinalTranscriptRef.current = '';
+            },
+            onNetworkError: (retryCount, maxRetries) => {
+              // Network errors are temporary - auto-retry with exponential backoff
+              console.warn(`🔄 Network error detected (${retryCount}/${maxRetries}), retrying in ${100 * retryCount}ms...`);
+              
+              // Clear any existing retry timer
+              if (networkErrorRetryRef.current) {
+                clearTimeout(networkErrorRetryRef.current);
+              }
+              
+              // Exponential backoff: 100ms, 200ms, 300ms, etc.
+              const retryDelayMs = 100 * retryCount;
+              
+              networkErrorRetryRef.current = setTimeout(() => {
+                // Only retry if user still has mic enabled
+                if (isMicListeningRef.current) {
+                  console.log(`↻ Retrying speech recognition after network error (attempt ${retryCount})`);
+                  handleMicToggle().catch(err => {
+                    console.error('Failed to retry speech recognition:', err);
+                    setIsMicListening(false);
+                  });
+                }
+              }, retryDelayMs);
             },
             onEnd: (isManualStop) => {
               // Only close mic if user manually stopped it
@@ -204,7 +231,7 @@ const CallModal = () => {
                 setIsMicListening(false);
               } else if (isMicListeningRef.current) {
                 // Auto-restart on browser timeout
-                console.log('🔄 Browser timeout detected during initial speech recognition, auto-restarting');
+                console.log('Browser timeout detected during initial speech recognition, auto-restarting');
                 setTimeout(() => {
                   autoRestartSpeechRecognitionOnTimeout();
                 }, 100);
@@ -345,6 +372,10 @@ const CallModal = () => {
               setSpeechEditable('');
               setIsSpeechEditing(false);
             }
+          },
+          onNetworkError: (retryCount, maxRetries) => {
+            // Propagate network errors but continue trying
+            console.warn(`⚠️ Auto-restart: Network error (${retryCount}/${maxRetries}), will retry...`);
           },
           onError: (error) => {
             console.error('Speech recognition error (auto-restart):', error);

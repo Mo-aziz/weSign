@@ -78,11 +78,27 @@ export type CallHookReturn = {
 };
 
 // WebSocket signaling configuration
-const WS_URL = `wss://192.168.100.80:3001`;
+// Use environment variable or construct URL dynamically
+const getWebSocketURL = (): string => {
+  // Try environment variable first
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
+  }
+  
+  // Fallback: construct from current location
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname;
+  const port = 3001;
+  
+  const url = `${protocol}//${host}:${port}`;
+  console.log(' Constructed WebSocket URL from current location:', url);
+  return url;
+};
 
 let ws: WebSocket | null = null;
 const messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();
 let lastConnectParams: { userId: string; username: string; isDeaf: boolean } | null = null;
+let wsConnectionFailedCount = 0; // Track connection failures
 
 const connectWebSocket = (userId: string, username: string, isDeaf: boolean) => {
   if (ws?.readyState === WebSocket.OPEN) return;
@@ -90,10 +106,14 @@ const connectWebSocket = (userId: string, username: string, isDeaf: boolean) => 
   // Store params for retry on disconnect
   lastConnectParams = { userId, username, isDeaf };
   
+  const WS_URL = getWebSocketURL();
+  console.log(`📡 Attempting to connect WebSocket to ${WS_URL} for user ${username}...`);
+  
   ws = new WebSocket(WS_URL);
   
   ws.onopen = () => {
-    console.log('WebSocket connected');
+    console.log('✓ WebSocket connected successfully');
+    wsConnectionFailedCount = 0; // Reset failure count on successful connection
     // Register with the server
     ws?.send(JSON.stringify({
       type: 'register',
@@ -101,6 +121,7 @@ const connectWebSocket = (userId: string, username: string, isDeaf: boolean) => 
       username,
       isDeaf
     }));
+    console.log(`✓ Registration message sent to signaling server for user: ${username} (${userId})`);
   };
   
   ws.onmessage = (event) => {
@@ -122,11 +143,14 @@ const connectWebSocket = (userId: string, username: string, isDeaf: boolean) => 
   };
   
   ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
+    wsConnectionFailedCount++;
+    console.error(`❌ WebSocket error (attempt ${wsConnectionFailedCount}):`, error);
+    console.error('   Signaling server may be unavailable or wrong URL configured');
+    console.error(`   Expected URL: ${getWebSocketURL()}`);
   };
   
   ws.onclose = () => {
-    console.log('WebSocket disconnected, retrying in 3 seconds...');
+    console.log('⚠️ WebSocket disconnected, retrying in 3 seconds...');
     ws = null;
     if (lastConnectParams) {
       const { userId, username, isDeaf } = lastConnectParams;
@@ -141,8 +165,8 @@ const sendSignalingMessage = (_toUserId: string, message: SignalingMessage) => {
   } else {
     const errorMsg = ws?.readyState === WebSocket.CONNECTING 
       ? 'WebSocket is connecting, try again in a moment' 
-      : 'WebSocket not connected';
-    console.error(errorMsg);
+      : `WebSocket not connected (state: ${ws?.readyState || 'undefined'}). Make sure signaling server is running and accessible at: ${getWebSocketURL()}`;
+    console.error(`❌ ${errorMsg}`);
     throw new Error(errorMsg);
   }
 };
@@ -252,9 +276,9 @@ export const updateUserTypeOnServer = async (newIsDeaf: boolean): Promise<void> 
     // Update local tracking
     lastConnectParams.isDeaf = newIsDeaf;
     
-    console.log('✅ User type update sent to server');
+    console.log(' User type update sent to server');
   } catch (error) {
-    console.error('❌ Failed to update user type on server:', error);
+    console.error('Failed to update user type on server:', error);
     throw error;
   }
 };
@@ -631,13 +655,13 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         actualContactIsDeaf = await queryUserType(contactId);
         console.log(`✓ Server reports contact "${contactUsername}" isDeaf: ${actualContactIsDeaf}`);
       } catch (queryError) {
-        console.warn('⚠️ Could not query server for contact type, using provided value:', queryError);
+        console.warn('Could not query server for contact type, using provided value:', queryError);
         // Fall back to provided value if query fails
       }
       
       // CLIENT-SIDE VALIDATION: Block hearing-to-hearing calls
       if (!isCurrentUserDeaf && !actualContactIsDeaf) {
-        console.error('❌ BLOCKED: Attempting to initiate hearing-to-hearing call');
+        console.error(' BLOCKED: Attempting to initiate hearing-to-hearing call');
         console.error(`   Caller: ${isCurrentUserDeaf ? 'Deaf' : 'Hearing'} | Callee: ${actualContactIsDeaf ? 'Deaf' : 'Hearing'}`);
         
         const errorMessage = 'Unable to establish connection. This platform supports calls between Deaf users and Hearing interpreters only.';
