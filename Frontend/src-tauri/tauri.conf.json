@@ -38,7 +38,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "https://ZUKSH-LAP:1420",
+    "devPath": "https://your computer hostname:1420",
     "distDir": "../dist"
   }
 }
