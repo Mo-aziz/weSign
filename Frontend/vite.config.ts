@@ -23,7 +23,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     hmr: {
-      host: 'ZUKSH-LAP', // Replace with your local IP address
+      host: 'Your computer hostname', // Replace with your local IP address
       port: 1420,
       protocol: 'https',
     },
