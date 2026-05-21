@@ -1708,10 +1708,12 @@ cd "sign language react V2"
 npm install
 
 # Daily development
+cd frontend
 npm run tauri:dev                          # Run desktop app (opens at http://localhost:1420/)
 
 # In another terminal (for multiplayer)
-npm run server                             # Start signaling server (port 3001)
+cd Backend full
+npm start                           # Start signaling server (port 3001)
 
 # Production build
 npm run tauri:build                        # Creates .exe installer
