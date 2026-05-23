@@ -1709,7 +1709,12 @@ npm install
 
 # Daily development
 cd frontend
-npm run tauri:dev                          # Run desktop app (opens at http://localhost:1420/)
+npm run tauri:dev  
+or                         # Run desktop app (opens at http://localhost:1420/)
+npm run dev    
+
+cd frontend 
+npm run server
 
 # In another terminal (for multiplayer)
 cd Backend full

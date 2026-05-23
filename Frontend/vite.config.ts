@@ -23,7 +23,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     hmr: {
-      host: 'Your computer hostname', // Replace with your local IP address
+      host: '192.168.1.171', // Replace with your local IP address
       port: 1420,
       protocol: 'https',
     },
