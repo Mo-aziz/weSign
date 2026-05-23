@@ -54,10 +54,6 @@ QUICK_REFERENCE.md
 Backend\ full/README.md
 Frontend/FIXES_DOCUMENTATION.md
 
-# Large model files
-TestingFinal/best_model.pt
-TestingFinal/*/*.task
-TestingFinal/mediapipeModels/
 
 # Python cache files
 __pycache__/
