@@ -21,7 +21,7 @@ A modern desktop application that enables seamless communication between deaf an
 ---
 
 ## What's New
-
+       
 ### Latest Updates (V2)
 
  **Enhanced Voice Intelligence**
