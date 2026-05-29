@@ -16,8 +16,7 @@ const Translation = () => {
   const [autoListen, setAutoListen] = useState(true);
   const [isInTauri, setIsInTauri] = useState(false);
 
-  // cadence so preview updates roughly every 5 seconds
-  const signService = useSignRecognitionService({ cadenceMs: 5000 });
+  const signService = useSignRecognitionService();
   const ttsService = useTextToSpeechService();
 
   const [signEditable, setSignEditable] = useState('');
@@ -257,6 +256,19 @@ const Translation = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Live preview</p>
+                {(signService.serviceStarting || signService.serviceError) && (
+                  <p
+                    className={`mb-2 rounded-xl border px-3 py-2 text-xs ${
+                      signService.serviceReady
+                        ? 'hidden'
+                        : signService.serviceStarting
+                          ? 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-300'
+                          : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                    }`}
+                  >
+                    {signService.serviceError ?? 'Checking sign recognition service...'}
+                  </p>
+                )}
                 <div className="mt-2 h-40 overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200">
                   <textarea
                     className="h-full w-full resize-none bg-transparent p-2 text-sm text-slate-700 outline-none dark:text-slate-200"

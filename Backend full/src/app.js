@@ -4,17 +4,17 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
+const { createCorsOptions } = require('./config/cors');
 
 const app = express();
 
 app.use(helmet());
-app.use(
-  cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  }),
-);
-app.use(morgan('dev'));
+app.use(cors(createCorsOptions()));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 app.use(express.json());
 

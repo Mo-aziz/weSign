@@ -3,7 +3,9 @@
  * Handles authentication tokens, error handling, and request/response formatting
  */
 
-const API_BASE_URL = '/api';
+import { getApiBaseUrl } from '../config/appConfig';
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Token storage
 const TOKEN_STORAGE_KEY = 'auth_token';

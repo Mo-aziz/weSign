@@ -61,3 +61,10 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+TestingFinal/build/
+TestingFinal/dist/
+TestingFinal/*.spec.bak
+
+# Tauri sign-recognition sidecar (built locally via build_sign_sidecar.ps1)
+Frontend/src-tauri/bin/sign-server-*
+!Frontend/src-tauri/bin/README.md

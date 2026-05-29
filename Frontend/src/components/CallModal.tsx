@@ -79,8 +79,8 @@ const CallModal = () => {
     }
   }, [remoteStream]);
 
-  // Sign recognition service
-  const signService = useSignRecognitionService({ cadenceMs: 5000 });
+  // Sign recognition service (uses call camera when available)
+  const signService = useSignRecognitionService({ videoElementRef: localVideoRef });
 
   // Speech recognition - EXACT copy of Translation page + sendTranscript + pause detection
   const [speechEditable, setSpeechEditable] = useState('');
@@ -931,6 +931,11 @@ const CallModal = () => {
           {/* Sign to text preview */}
           <div>
             <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">Your signing</p>
+            {!signService.serviceReady && signService.serviceError && (
+              <p className="mb-2 rounded-lg border border-amber-400 bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-100">
+                {signService.serviceError}
+              </p>
+            )}
             {previewEditMode ? (
               // Edit mode
               <div>

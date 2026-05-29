@@ -17,6 +17,7 @@ A modern desktop application that enables seamless communication between deaf an
 10. [Building for Production](#building-for-production)
 11. [Troubleshooting](#troubleshooting)
 12. [API Reference](#api-reference)
+13. [Mobile cloud deployment (Railway)](#mobile-cloud-deployment-railway)
 
 ---
 
@@ -571,6 +572,7 @@ The certificate is **safe for local development** - it's only untrusted because 
 Runs the full Tauri desktop application with both frontend (Vite) and native window:
 
 ```bash
+cd Frontend
 npm run tauri:dev
 ```
 
@@ -579,8 +581,46 @@ npm run tauri:dev
 **What happens:**
 1. Vite dev server starts on `https://localhost:1420/` (HTTPS with self-signed cert)
 2. Tauri opens a native Windows window automatically displaying the React app
-3. Hot module replacement (HMR) enabled for instant code updates
-4. Opens DevTools for debugging (F12 in Tauri window)
+3. **Sign recognition** starts automatically on port `8001` (sidecar if built, else Python fallback)
+4. Hot module replacement (HMR) enabled for instant code updates
+5. Opens DevTools for debugging (F12 in Tauri window)
+
+#### Sign recognition service (port 8001)
+
+| Mode | How it runs | User action |
+|------|-------------|-------------|
+| **Tauri dev** | Auto-started by the app (sidecar or Python) | Optional: install `TestingFinal/requirements.txt` for Python fallback |
+| **Web browser only** | Not auto-started | Run `python TestingFinal/sign_server.py` in a separate terminal |
+| **Packaged `.exe`** | PyInstaller sidecar bundled with the installer | None — no Python install required |
+
+Build the sidecar before creating a production installer:
+
+```powershell
+cd TestingFinal
+.\build_sign_sidecar.ps1
+cd ..\Frontend
+npm run tauri:build
+```
+
+Details: [TestingFinal/README.md](TestingFinal/README.md)
+
+TTS (when used) remains on port **8000**.
+
+## Mobile cloud deployment (Railway)
+
+For the **mobile app**, production APIs must use deployed **HTTPS** URLs (not `localhost`).
+
+| Component | Deploy to | Mobile env var |
+|-----------|-----------|----------------|
+| Node API (`Backend full`) | Railway | `VITE_PROD_BACKEND_URL` |
+| Sign AI (`TestingFinal`) | Railway (Docker) | `VITE_PROD_AI_SERVICE_URL` |
+| MongoDB | Atlas / Railway | `MONGODB_URI` (backend only) |
+| WebSocket signaling | Railway | `VITE_PROD_WS_URL` |
+
+**Backend start command (Railway):** `npm start`  
+**Sign AI start command (Railway Docker):** `uvicorn sign_server:app --host 0.0.0.0 --port $PORT`
+
+Full guide: **[MOBILE_CLOUD_DEPLOYMENT.md](MOBILE_CLOUD_DEPLOYMENT.md)**
 
 ### Option 2: Web Browser Only
 Test the React app in your default browser (without desktop wrapper):

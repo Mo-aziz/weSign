@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getWebSocketUrl, isProductionBuild } from '../config/appConfig';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ending';
 
@@ -77,21 +78,21 @@ export type CallHookReturn = {
   toggleMic: () => void;
 };
 
-// WebSocket signaling configuration
-// Use environment variable or construct URL dynamically
 const getWebSocketURL = (): string => {
-  // Try environment variable first
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL;
+  const configured = getWebSocketUrl();
+  if (configured) {
+    return configured;
   }
-  
-  // Fallback: construct from current location
+
+  if (isProductionBuild) {
+    throw new Error('VITE_PROD_WS_URL is required for production mobile builds.');
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.hostname;
   const port = 3001;
-  
   const url = `${protocol}//${host}:${port}`;
-  console.log(' Constructed WebSocket URL from current location:', url);
+  console.log('Constructed WebSocket URL from current location:', url);
   return url;
 };
 

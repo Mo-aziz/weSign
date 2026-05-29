@@ -9,6 +9,9 @@
       "category": "DeveloperTool",
       "targets": "all",
       "identifier": "com.signlanguage.communicator",
+      "externalBin": [
+        "bin/sign-server"
+      ],
       "icon": [
         "icons/icon.ico"
       ],

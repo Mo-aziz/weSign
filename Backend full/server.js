@@ -5,16 +5,17 @@ const { Server } = require('socket.io');
 const app = require('./src/app');
 const { connectDB } = require('./src/config/db');
 const { setupSocket } = require('./src/realtime/socket');
+const { validateEnv } = require('./src/config/env');
+const { getSocketCorsOptions } = require('./src/config/cors');
 
-const PORT = process.env.PORT || 3000;
+validateEnv();
+
+const PORT = Number(process.env.PORT) || 3000;
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
+  cors: getSocketCorsOptions(),
 });
 
 setupSocket(io);
