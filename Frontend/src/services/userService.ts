@@ -29,6 +29,13 @@ export const getUserProfile = async (): Promise<User> => {
 };
 
 /**
+ * Get user by username (for adding contacts / calls)
+ */
+export const getUserByUsername = async (username: string): Promise<User> => {
+  return apiGet(`/users/username/${encodeURIComponent(username.trim())}`);
+};
+
+/**
  * Get user by ID
  */
 export const getUserById = async (userId: string): Promise<User> => {
@@ -106,6 +113,7 @@ export const registerDeviceToken = async (deviceToken: string): Promise<void> =>
 
 export default {
   getUserProfile,
+  getUserByUsername,
   getUserById,
   updateUserProfile,
   checkUsernameExists,

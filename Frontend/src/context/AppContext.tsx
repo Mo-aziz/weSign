@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useCallService } from '../services/useCallService';
 import { clearTokens, getAccessToken } from '../services/apiClient';
+import { getUserByUsername, getUserProfile } from '../services/userService';
+import {
+  getApiBaseUrl,
+  getAiServiceUrl,
+  getWebSocketUrl,
+  useProductionServices,
+} from '../config/appConfig';
 import {
   AppContext,
+  CONTACTS_STORAGE_KEY,
   DEFAULT_CONTACTS,
   THEME_STORAGE_KEY,
-  generateUserId,
-  getInitialDarkMode,
   type AppContextValue,
   type AppUser,
   type Contact,
@@ -15,16 +21,29 @@ import {
 
 const USER_STORAGE_KEY = 'app_user';
 
+const loadStoredContacts = (): Contact[] => {
+  if (typeof window === 'undefined') return DEFAULT_CONTACTS;
+  try {
+    const raw = localStorage.getItem(CONTACTS_STORAGE_KEY);
+    if (!raw) return DEFAULT_CONTACTS;
+    const parsed = JSON.parse(raw) as Contact[];
+    return Array.isArray(parsed) ? parsed : DEFAULT_CONTACTS;
+  } catch {
+    return DEFAULT_CONTACTS;
+  }
+};
+
 export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
-  // Force reset contacts to defaults by clearing any cached state
-  const [contacts, setContacts] = useState<Contact[]>(() => {
-    // Clear any potential cached contacts
-    return DEFAULT_CONTACTS;
+  const [contacts, setContacts] = useState<Contact[]>(loadStoredContacts);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light') return false;
+    if (stored === 'dark') return true;
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
   });
-  const [darkMode, setDarkMode] = useState<boolean>(getInitialDarkMode);
 
-  // Initialize call service
   const {
     callState,
     currentCall,
@@ -42,24 +61,60 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     isCameraEnabled,
     isMicEnabled,
     toggleCamera,
-    toggleMic
+    toggleMic,
   } = useCallService(user?.id ?? '', user?.username ?? '', user?.isDeaf ?? false);
 
-  // Auto-restore user from localStorage on mount
+  useEffect(() => {
+    console.log('[WeSign] Service endpoints', {
+      production: useProductionServices(),
+      api: getApiBaseUrl(),
+      signaling: getWebSocketUrl(),
+      signAi: getAiServiceUrl(),
+    });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
+  }, [contacts]);
+
   useEffect(() => {
     const token = getAccessToken();
-    if (token) {
+    if (!token) return;
+
+    const restore = async () => {
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
-        } catch (error) {
-          console.error('Failed to restore user from localStorage:', error);
+          setUser(JSON.parse(storedUser) as AppUser);
+        } catch {
           clearTokens();
+          localStorage.removeItem(USER_STORAGE_KEY);
         }
       }
-    }
+
+      try {
+        const profile = await getUserProfile();
+        if (profile?.id && profile.username) {
+          setUser({
+            id: profile.id,
+            username: profile.username,
+            isDeaf: profile.isDeafMute,
+          });
+          localStorage.setItem(
+            USER_STORAGE_KEY,
+            JSON.stringify({
+              id: profile.id,
+              username: profile.username,
+              isDeaf: profile.isDeafMute,
+            }),
+          );
+        }
+      } catch (error) {
+        console.warn('Could not refresh profile from API:', error);
+      }
+    };
+
+    void restore();
   }, []);
 
   useEffect(() => {
@@ -73,8 +128,7 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [darkMode]);
 
-  const login: AppContextValue['login'] = ({ username, isDeaf }) => {
-    const id = generateUserId(username);
+  const login: AppContextValue['login'] = ({ id, username, isDeaf }) => {
     const userData = { id, username, isDeaf };
     setUser(userData);
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
@@ -85,22 +139,40 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(USER_STORAGE_KEY);
     setUser(null);
     setContacts(DEFAULT_CONTACTS);
+    localStorage.removeItem(CONTACTS_STORAGE_KEY);
   };
 
-  const addContact: AppContextValue['addContact'] = (username) => {
+  const addContact: AppContextValue['addContact'] = useCallback(async (username) => {
     const trimmed = username.trim();
     if (!trimmed) {
       return { success: false, message: 'Enter a username before adding a contact.' };
     }
-    const exists = contacts.some((contact) => contact.username.toLowerCase() === trimmed.toLowerCase());
+
+    const exists = contacts.some(
+      (contact) => contact.username.toLowerCase() === trimmed.toLowerCase(),
+    );
     if (exists) {
       return { success: false, message: 'That contact is already saved.' };
     }
 
-    const id = generateUserId(trimmed);
-    setContacts((prev) => [...prev, { id, username: trimmed }]);
-    return { success: true };
-  };
+    try {
+      const remoteUser = await getUserByUsername(trimmed);
+      if (!remoteUser?.id) {
+        return { success: false, message: 'User not found on the server.' };
+      }
+
+      setContacts((prev) => [
+        ...prev,
+        { id: remoteUser.id, username: remoteUser.username || trimmed },
+      ]);
+      return { success: true };
+    } catch {
+      return {
+        success: false,
+        message: `User "${trimmed}" not found. They must sign up first (same backend).`,
+      };
+    }
+  }, [contacts]);
 
   const removeContact: AppContextValue['removeContact'] = (contactId) => {
     setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
@@ -113,20 +185,22 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const updateUser: AppContextValue['updateUser'] = (updates) => {
     setUser((prev) => {
       if (!prev) return prev;
-      return { ...prev, ...updates };
+      const next = { ...prev, ...updates };
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(next));
+      return next;
     });
   };
 
   const value = useMemo<AppContextValue>(
-    () => ({ 
-      user, 
-      contacts, 
-      darkMode, 
-      login, 
-      logout, 
-      addContact, 
-      removeContact, 
-      toggleDarkMode, 
+    () => ({
+      user,
+      contacts,
+      darkMode,
+      login,
+      logout,
+      addContact,
+      removeContact,
+      toggleDarkMode,
       updateUser,
       callState,
       currentCall,
@@ -144,14 +218,24 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
       isCameraEnabled,
       isMicEnabled,
       toggleCamera,
-      toggleMic
+      toggleMic,
     }),
-    [user, contacts, darkMode, callState, currentCall, incomingCall, localStream, remoteStream, translationMessages, transcriptMessages, isCameraEnabled, isMicEnabled]
+    [
+      user,
+      contacts,
+      darkMode,
+      addContact,
+      callState,
+      currentCall,
+      incomingCall,
+      localStream,
+      remoteStream,
+      translationMessages,
+      transcriptMessages,
+      isCameraEnabled,
+      isMicEnabled,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
-
-// Re-export types for backward compatibility
-export type { AppContextValue, AppUser, Contact, VoiceSettings };
-export { AppContext };

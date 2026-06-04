@@ -26,9 +26,9 @@ export type AppContextValue = {
   user: AppUser | null;
   contacts: Contact[];
   darkMode: boolean;
-  login: (payload: { username: string; isDeaf: boolean }) => void;
+  login: (payload: { id: string; username: string; isDeaf: boolean }) => void;
   logout: () => void;
-  addContact: (username: string) => { success: boolean; message?: string };
+  addContact: (username: string) => Promise<{ success: boolean; message?: string }>;
   removeContact: (contactId: string) => void;
   toggleDarkMode: () => void;
   updateUser: (updates: Partial<Omit<AppUser, 'id'>>) => void;
@@ -54,11 +54,10 @@ export type AppContextValue = {
 
 export const AppContext = createContext<AppContextValue | undefined>(undefined);
 export const THEME_STORAGE_KEY = 'signlang.theme';
-export const DEFAULT_CONTACTS: Contact[] = [
-  { id: 'mentor-7p39f1', username: 'Mentor' },
-  { id: 'interpreter-h42km0', username: 'Interpreter' },
-  { id: 'friend-lm229v', username: 'Amelia' },
-];
+/** Start empty — add teammates by exact Railway/backend username. */
+export const DEFAULT_CONTACTS: Contact[] = [];
+
+export const CONTACTS_STORAGE_KEY = 'wesign.contacts';
 
 export const getInitialDarkMode = () => {
   if (typeof window === 'undefined') return true;
