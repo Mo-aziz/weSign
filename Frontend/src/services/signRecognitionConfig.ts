@@ -1,39 +1,17 @@
-import { getAiServiceUrl, useProductionServices } from '../config/appConfig';
+import { getAiServiceUrl } from '../config/appConfig';
 
 export const SIGN_RECOGNITION_SERVICE_URL = getAiServiceUrl();
-export const SIGN_SERVICE_STARTUP_GRACE_MS = useProductionServices() ? 60_000 : 45_000;
+export const SIGN_SERVICE_STARTUP_GRACE_MS = 60_000;
 export const SIGN_HEALTH_POLL_INTERVAL_MS = 1_000;
 
 export const isTauriApp = (): boolean =>
   typeof window !== 'undefined' && '__TAURI__' in window;
 
-export const signServiceUnavailableMessage = (): string => {
-  if (useProductionServices()) {
-    return (
-      'Sign recognition is unavailable. Check your network connection and verify ' +
-      'VITE_PROD_AI_SERVICE_URL points to the deployed Railway AI service.'
-    );
-  }
-
-  if (isTauriApp()) {
-    return (
-      'Sign recognition is not responding. Restart the desktop app or run ' +
-      'TestingFinal/sign_server.py for development.'
-    );
-  }
-
-  return (
-    'Sign recognition service is not running. For web dev, run: ' +
-    'cd TestingFinal && pip install -r requirements.txt && python sign_server.py'
-  );
-};
+export const signServiceUnavailableMessage = (): string =>
+  'Sign recognition is unavailable. Check your network connection and verify the Railway AI service is running.';
 
 export const signServiceStartingMessage = (): string =>
-  useProductionServices()
-    ? 'Connecting to sign recognition cloud service...'
-    : isTauriApp()
-      ? 'Starting sign recognition service...'
-      : 'Connecting to sign recognition service...';
+  'Connecting to sign recognition cloud service...';
 
 export type SignHealthResponse = {
   status: string;

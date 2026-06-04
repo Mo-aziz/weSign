@@ -1,89 +1,60 @@
 /**
- * API configuration for dev, production builds, and Railway testing.
+ * Remote service URLs (Railway). The frontend may run locally or deployed;
+ * backend, signaling, and sign AI always use these cloud endpoints.
  *
- * Production Railway URLs (set in .env.production):
- * - VITE_PROD_BACKEND_URL
- * - VITE_PROD_AI_SERVICE_URL
- * - VITE_PROD_WS_URL
- *
- * Test production from dev server: VITE_USE_PRODUCTION_URLS=true in .env.local
+ * Override in `.env` (see `.env.example`). Legacy `VITE_PROD_*` names still work.
  */
 
 const trimSlash = (url: string) => url.replace(/\/$/, '');
 
-/** Railway production defaults (used if env vars omitted when production mode is on). */
-export const PRODUCTION_DEFAULTS = {
+/** Railway defaults when env vars are omitted. */
+export const SERVICE_DEFAULTS = {
   backend: 'https://wesign-backend-production-7f55.up.railway.app',
   signAi: 'https://testingfinal-production.up.railway.app',
   signaling: 'wss://signaling-server-production-6bfc.up.railway.app',
 } as const;
 
-export const isProductionBuild = import.meta.env.PROD;
+/** @deprecated Use SERVICE_DEFAULTS */
+export const PRODUCTION_DEFAULTS = SERVICE_DEFAULTS;
 
-/** True for release builds OR when forcing Railway URLs in dev (.env.local). */
-export const useProductionServices = (): boolean =>
-  isProductionBuild || import.meta.env.VITE_USE_PRODUCTION_URLS === 'true';
-
-const requireSecureUrl = (url: string, label: string) => {
-  if (!useProductionServices()) return;
+const readServiceUrl = (
+  primary: string | undefined,
+  legacy: string | undefined,
+  fallback: string,
+  label: string
+): string => {
+  const url = trimSlash(primary || legacy || fallback);
   if (!/^https:\/\//i.test(url) && !/^wss:\/\//i.test(url)) {
     throw new Error(`${label} must use HTTPS or WSS: ${url}`);
   }
+  return url;
 };
 
-const prodBackend = () =>
-  (import.meta.env.VITE_PROD_BACKEND_URL as string | undefined) || PRODUCTION_DEFAULTS.backend;
+export const getBackendBaseUrl = (): string =>
+  readServiceUrl(
+    import.meta.env.VITE_BACKEND_URL as string | undefined,
+    import.meta.env.VITE_PROD_BACKEND_URL as string | undefined,
+    SERVICE_DEFAULTS.backend,
+    'Backend URL'
+  );
 
-const prodSignAi = () =>
-  (import.meta.env.VITE_PROD_AI_SERVICE_URL as string | undefined) || PRODUCTION_DEFAULTS.signAi;
+export const getApiBaseUrl = (): string => `${getBackendBaseUrl()}/api`;
 
-const prodWs = () =>
-  (import.meta.env.VITE_PROD_WS_URL as string | undefined) || PRODUCTION_DEFAULTS.signaling;
+export const getAiServiceUrl = (): string =>
+  readServiceUrl(
+    import.meta.env.VITE_AI_SERVICE_URL as string | undefined,
+    import.meta.env.VITE_PROD_AI_SERVICE_URL as string | undefined,
+    SERVICE_DEFAULTS.signAi,
+    'AI service URL'
+  );
 
-export const getBackendBaseUrl = (): string => {
-  if (useProductionServices()) {
-    const url = trimSlash(prodBackend());
-    requireSecureUrl(url, 'VITE_PROD_BACKEND_URL');
-    return url;
-  }
-
-  const dev = import.meta.env.VITE_DEV_BACKEND_URL as string | undefined;
-  if (dev) {
-    return trimSlash(dev);
-  }
-
-  return '';
-};
-
-export const getApiBaseUrl = (): string => {
-  const backend = getBackendBaseUrl();
-  return backend ? `${backend}/api` : '/api';
-};
-
-export const getAiServiceUrl = (): string => {
-  if (useProductionServices()) {
-    const url = trimSlash(prodSignAi());
-    requireSecureUrl(url, 'VITE_PROD_AI_SERVICE_URL');
-    return url;
-  }
-
-  const dev =
-    (import.meta.env.VITE_DEV_AI_SERVICE_URL as string | undefined) ||
-    'http://127.0.0.1:8001';
-
-  return trimSlash(dev);
-};
-
-export const getWebSocketUrl = (): string | undefined => {
-  if (useProductionServices()) {
-    const url = trimSlash(prodWs());
-    requireSecureUrl(url, 'VITE_PROD_WS_URL');
-    return url;
-  }
-
-  const dev = import.meta.env.VITE_DEV_WS_URL as string | undefined;
-  return dev ? trimSlash(dev) : undefined;
-};
+export const getWebSocketUrl = (): string =>
+  readServiceUrl(
+    import.meta.env.VITE_WS_URL as string | undefined,
+    import.meta.env.VITE_PROD_WS_URL as string | undefined,
+    SERVICE_DEFAULTS.signaling,
+    'WebSocket URL'
+  );
 
 export const createSignSessionId = (): string => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {

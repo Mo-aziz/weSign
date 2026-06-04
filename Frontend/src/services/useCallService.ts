@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getWebSocketUrl, useProductionServices } from '../config/appConfig';
+import { getWebSocketUrl } from '../config/appConfig';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ending';
 
@@ -78,23 +78,7 @@ export type CallHookReturn = {
   toggleMic: () => void;
 };
 
-const getWebSocketURL = (): string => {
-  const configured = getWebSocketUrl();
-  if (configured) {
-    return configured;
-  }
-
-  if (useProductionServices()) {
-    throw new Error('VITE_PROD_WS_URL is required when using production services.');
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.hostname;
-  const port = 3001;
-  const url = `${protocol}//${host}:${port}`;
-  console.log('Constructed WebSocket URL from current location:', url);
-  return url;
-};
+const getWebSocketURL = (): string => getWebSocketUrl();
 
 let ws: WebSocket | null = null;
 const messageCallbacks: Map<string, ((msg: SignalingMessage) => void)[]> = new Map();
@@ -507,7 +491,7 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       } else if (errorName === 'NotReadableError' || errorMessage.includes('being used')) {
         throw new Error('MediaDeviceInUse: Camera or microphone is being used by another application - please close it and retry');
       } else if (errorName === 'SecurityError') {
-        throw new Error('SecurityError: Cannot access media - this may require HTTPS. If developing locally, try using http://localhost or 127.0.0.1');
+        throw new Error('SecurityError: Cannot access camera/microphone. Use HTTPS (deployed site) or allow permissions in your browser.');
       }
       
       throw new Error(`getUserMedia error: ${errorName} - ${errorMessage}`);

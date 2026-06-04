@@ -6,7 +6,6 @@ import {
   getApiBaseUrl,
   getAiServiceUrl,
   getWebSocketUrl,
-  useProductionServices,
 } from '../config/appConfig';
 import {
   AppContext,
@@ -65,7 +64,6 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     console.log('[WeSign] Service endpoints', {
-      production: useProductionServices(),
       api: getApiBaseUrl(),
       signaling: getWebSocketUrl(),
       signAi: getAiServiceUrl(),

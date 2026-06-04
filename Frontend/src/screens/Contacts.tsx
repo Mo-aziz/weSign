@@ -77,7 +77,7 @@ const Contacts = () => {
       }
       
       if (errorMessage.includes('WebSocket')) {
-        setFeedback('Connection error: Signaling server unreachable. Make sure to run "npm run server" in a separate terminal.');
+        setFeedback('Connection error: Signaling server unreachable. Check your internet connection and try again.');
       } else if (errorMessage.includes('MediaPermissionDenied')) {
         setFeedback('❌ Camera/Microphone access denied.\n\n FIXES:\n1. BROWSER: Click lock icon → Allow Camera & Microphone\n2. WINDOWS: Settings → Privacy → Camera/Microphone → Allow browser\n3. CLOSE: Close Zoom/Teams/Discord using your camera\n4. RETRY: Try calling again');
       } else if (errorMessage.includes('NoMediaDeviceFound')) {
@@ -85,7 +85,7 @@ const Contacts = () => {
       } else if (errorMessage.includes('MediaDeviceInUse')) {
         setFeedback('❌ Your camera or microphone is being used by another app. Close it and retry.');
       } else if (errorMessage.includes('SecurityError')) {
-        setFeedback('❌ Security issue: Try accessing via http://localhost:1420 or contact support.');
+        setFeedback('❌ Security issue: Camera/microphone requires a secure context (HTTPS). Use the deployed website or allow permissions in your browser.');
       } else if (errorMessage.includes('MediaDevices') || errorMessage.includes('getUserMedia')) {
         setFeedback(`❌ Camera/Microphone error: ${errorMessage}`);
       } else {

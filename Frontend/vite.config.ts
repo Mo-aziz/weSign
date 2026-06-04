@@ -34,12 +34,6 @@ export default defineConfig({
       port: 1420,
       protocol: 'https',
     },
-    proxy: {
-      '/api': {
-        target: process.env.VITE_DEV_BACKEND_URL || 'http://localhost:3000',
-        changeOrigin: true,
-      },
-    },
   },
   // to make use of `TAURI_DEBUG` and other env variables
   // https://tauri.studio/v1/api/config#buildconfig.beforedevcommand
