@@ -12,7 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "build:sign-sidecar": "powershell -ExecutionPolicy Bypass -File ..\\TestingFinal\\build_sign_sidecar.ps1",
-    "server": "node signaling-server.js"
+    "server": "node ../signaling-server/server.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",

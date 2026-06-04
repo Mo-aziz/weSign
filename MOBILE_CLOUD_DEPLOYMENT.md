@@ -96,17 +96,25 @@ Copy public URL → `VITE_PROD_AI_SERVICE_URL`.
 
 ---
 
-## 4. WebSocket signaling (optional separate service)
+## 4. WebSocket signaling (video calls)
 
-Deploy `Frontend/signaling-server.js` as its own Railway Node service:
+Deploy the **`signaling-server/`** folder as its own Railway service (Dockerfile included).
 
-**Start command:**
+| Setting | Value |
+|---------|--------|
+| Root directory | `signaling-server` |
+| Start | `npm start` (Dockerfile default) |
+| Health | `GET /health` |
 
-```bash
-node signaling-server.js
+Generate a public domain, then set:
+
+```text
+wss://your-signaling.up.railway.app
 ```
 
-Set `PORT` in Railway. Use `wss://` public URL as `VITE_PROD_WS_URL`.
+as `VITE_PROD_WS_URL` (Flutter: WebSocket base URL).
+
+Railway terminates TLS; the container uses HTTP + WebSocket internally.
 
 ---
 
