@@ -5,16 +5,23 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const { createCorsOptions } = require('./config/cors');
+const { setupSwagger } = require('./config/swagger');
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+  }),
+);
 app.use(cors(createCorsOptions()));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+setupSwagger(app);
 
 app.use(express.json());
 
