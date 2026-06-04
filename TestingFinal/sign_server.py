@@ -38,7 +38,11 @@ def _is_production() -> bool:
 
 
 def _parse_allowed_origins() -> list[str]:
-    raw = os.getenv("ALLOWED_ORIGINS", "")
+    raw = (
+        os.getenv("ALLOWED_ORIGINS", "")
+        or os.getenv("CLIENT_ORIGIN", "")
+        or os.getenv("CORS_ALLOWED_ORIGINS", "")
+    )
     configured = [part.strip() for part in raw.split(",") if part.strip()]
     if _is_production():
         return configured
@@ -73,13 +77,12 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="WeSign Sign Recognition", lifespan=lifespan)
 
 _allowed_origins = _parse_allowed_origins()
-_allow_origin_regex = (
-    None if _is_production() else r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
-)
+# Local React/Vite (e.g. https://localhost:1420) calling Railway AI service
+_local_dev_origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=_allow_origin_regex,
+    allow_origin_regex=_local_dev_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
