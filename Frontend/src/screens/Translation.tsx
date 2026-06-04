@@ -197,16 +197,17 @@ const Translation = () => {
 
   return (
     <div className={`${isInTauri ? 'space-y-8' : 'space-y-8 w-full mx-auto px-1 py-8 overflow-x-hidden'}`}>
-      <header className={`rounded-3xl border border-slate-200 bg-white/70 p-6 shadow-lg dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-glow ${isInTauri ? '' : 'mx-1'}`}>
+      <header className={`page-hero p-6 ${isInTauri ? '' : 'mx-1'}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white lg:text-3xl">Translation studio</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+            <p className="section-title">Translation studio</p>
+            <h1 className="section-heading lg:text-3xl">Translation studio</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
               Simulate both sign-to-voice and speech-to-text workflows. You can use this space to communicate face to face with a signer.
             </p>
           </div>
-          <div className={`flex ${isInTauri ? 'min-w-[220px]' : 'flex-1'} flex-col gap-2 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 ${isInTauri ? 'text-xs' : 'text-sm'} text-slate-500 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-400`}>
-            <span className={`font-semibold ${isInTauri ? 'text-slate-700' : 'text-slate-800'} dark:text-slate-200`}>Signed in as {user?.username ?? 'guest'}</span>
+          <div className={`glass-panel flex ${isInTauri ? 'min-w-[220px]' : 'flex-1'} flex-col gap-2 rounded-2xl px-4 py-3 ${isInTauri ? 'text-xs' : 'text-sm'} text-slate-300`}>
+            <span className="font-semibold text-white">Signed in as {user?.username ?? 'guest'}</span>
             <span className={isInTauri ? '' : 'break-words'}>Preference: {user?.isDeaf ? 'Sign language lead' : 'Spoken language lead'}</span>
           </div>
         </div>
@@ -215,14 +216,14 @@ const Translation = () => {
       <section className={`${isInTauri ? 'space-y-6 lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0' : 'space-y-6 w-full flex flex-col'}`}>
         <div className={`space-y-6 ${isInTauri ? '' : 'mx-1'}`}>
           <div className="card-surface space-y-4 p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Sign → Text → Voice</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-300">
                   Practice signing and preview generated captions before broadcasting.
                 </p>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
                 <label className="flex items-center gap-2">
                   <span>Auto speak</span>
                   <button
@@ -240,13 +241,13 @@ const Translation = () => {
                 </label>
                 <button
                   onClick={signService.startRecognition}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300"
+                  className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs"
                 >
                   Start
                 </button>
                 <button
                   onClick={signService.stopRecognition}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-rose-500 hover:text-rose-500 dark:border-slate-700"
+                  className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs hover:border-rose-400 hover:text-rose-100"
                 >
                   Stop
                 </button>
@@ -255,7 +256,7 @@ const Translation = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Live preview</p>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Live preview</p>
                 {(signService.serviceStarting || signService.serviceError) && (
                   <p
                     className={`mb-2 rounded-xl border px-3 py-2 text-xs ${
@@ -269,9 +270,9 @@ const Translation = () => {
                     {signService.serviceError ?? 'Checking sign recognition service...'}
                   </p>
                 )}
-                <div className="mt-2 h-40 overflow-hidden rounded-2xl border border-slate-200 bg-white/80 p-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-200">
+                <div className="mt-2 h-40 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2 text-sm text-slate-100">
                   <textarea
-                    className="h-full w-full resize-none bg-transparent p-2 text-sm text-slate-700 outline-none dark:text-slate-200"
+                    className="h-full w-full resize-none bg-transparent p-2 text-sm text-slate-100 outline-none"
                     value={signEditable}
                     onChange={(e) => {
                       setIsSignEditing(true);
@@ -300,7 +301,7 @@ const Translation = () => {
                       }
                     }}
                     disabled={!signEditable && !signService.previewText}
-                    className={`flex-1 rounded-2xl px-3 py-2 font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700 ${
+                    className={`float-button flex-1 rounded-2xl px-3 py-2 font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:translate-y-0 ${
                       darkMode ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-black text-white hover:bg-gray-800'
                     }`}
                   >
@@ -312,7 +313,7 @@ const Translation = () => {
                       setIsSignEditing(false);
                     }}
                     disabled={!signEditable && !signService.previewText}
-                    className={`rounded-2xl px-3 py-2 font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 dark:border-slate-700 dark:text-slate-300 ${
+                    className={`float-button float-button-secondary rounded-2xl px-3 py-2 font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 ${
                       darkMode ? 'bg-purple-600 text-White hover:bg-purple-700' : 'border-slate-300 text-slate-600 hover:border-amber-500 hover:text-amber-500'
                     }`}
                   >
@@ -325,17 +326,17 @@ const Translation = () => {
               </div>
 
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">History</p>
+                <p className="text-xs uppercase tracking-wide text-slate-400">History</p>
                 <div className="mt-2 space-y-2">
                   {signService.history.length === 0 && (
-                    <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-4 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-400">
+                    <p className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-xs text-slate-300">
                       Confirm translations to build a reference list.
                     </p>
                   )}
                   {signService.history.map((entry) => (
                     <div
                       key={entry.id}
-                      className="rounded-2xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200"
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-100"
                     >
                       <p>{entry.text}</p>
                       <p className="text-xs text-slate-400">
@@ -353,17 +354,17 @@ const Translation = () => {
               <h2 className="text-lg font-semibold text-white">Voice output queue</h2>
               <button
                 onClick={ttsService.stop}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-rose-500 transition hover:border-rose-500 dark:border-slate-700 dark:text-rose-300"
+                className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs text-rose-200 hover:border-rose-400 hover:text-white"
               >
                 Clear queue
               </button>
             </div>
-            <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <ul className="space-y-2 text-sm text-slate-300">
               {ttsService.queue.length === 0 && <li>No items awaiting playback.</li>}
               {ttsService.queue.map((item) => (
                 <li
                   key={item.id}
-                  className="rounded-2xl border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-3"
                 >
                   <p>{item.text}</p>
                   <p className="text-xs text-slate-400">
@@ -377,14 +378,14 @@ const Translation = () => {
 
         <div className={`space-y-6 ${isInTauri ? '' : 'mx-1'}`}>
           <div className="card-surface space-y-4 p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">Speech → Real-time captions</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-300">
                   Simulate live captions for the signing participant.
                 </p>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
                 <label className="flex items-center gap-2">
                   <span>Auto listen</span>
                   <button
@@ -402,10 +403,10 @@ const Translation = () => {
                 </label>
                 <button
                   onClick={handleMicToggle}
-                  className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                    className={`float-button rounded-xl px-3 py-2 text-xs font-semibold transition ${
                     isMicListening
-                      ? 'border-rose-500 bg-rose-500 text-white hover:bg-rose-600'
-                      : 'border-slate-300 text-slate-600 hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300'
+                      ? 'float-button-danger'
+                      : 'float-button-secondary'
                   }`}
                 >
                   {isMicListening ? 'Stop mic' : 'Start mic'}
@@ -424,7 +425,7 @@ const Translation = () => {
                       ...prev,
                     ]);
                   }}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-500 hover:text-brand-500 dark:border-slate-700 dark:text-slate-300"
+                  className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs"
                 >
                   Add sample now
                 </button>

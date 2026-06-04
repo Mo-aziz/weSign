@@ -9,6 +9,8 @@
  * - VITE_PROD_WS_URL (WebSocket signaling)
  */
 
+const DEFAULT_PROD_BACKEND_URL = 'https://wesign-backend-production-7f55.up.railway.app';
+
 const trimSlash = (url: string) => url.replace(/\/$/, '');
 
 const requireSecureUrlInProduction = (url: string, label: string) => {
@@ -26,7 +28,7 @@ export const getBackendBaseUrl = (): string => {
 
   if (isProductionBuild) {
     if (!prod) {
-      throw new Error('VITE_PROD_BACKEND_URL is required for production mobile builds.');
+      return trimSlash(DEFAULT_PROD_BACKEND_URL);
     }
     requireSecureUrlInProduction(prod, 'VITE_PROD_BACKEND_URL');
     return trimSlash(prod);

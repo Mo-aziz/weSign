@@ -92,7 +92,7 @@ const VoiceSettings = ({
                 console.warn('[VoiceSettings] Voice not found in array!');
               }
             }}
-            className="w-full rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+            className="input-field w-full"
           >
             {filteredVoices.map((voice) => (
               <option key={voice.name} value={voice.name}>
@@ -122,7 +122,7 @@ const VoiceSettings = ({
               setRate(newRate);
               onRateChange(newRate);
             }}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-500"
+            className="h-2 w-full cursor-pointer rounded-lg appearance-none accent-brand-500"
           />
           <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-tighter">
             <span>Slower</span>
@@ -147,7 +147,7 @@ const VoiceSettings = ({
               setPitch(newPitch);
               onPitchChange(newPitch);
             }}
-            className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-slate-500"
+            className="h-2 w-full cursor-pointer rounded-lg appearance-none accent-slate-500"
           />
           <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-tighter">
             <span>Deep</span>

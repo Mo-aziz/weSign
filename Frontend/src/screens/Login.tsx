@@ -84,16 +84,26 @@ const Login = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-6 py-12 dark:bg-slate-950">
-      <div className="w-full max-w-md space-y-8 card-surface p-10">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-semibold text-slate-900 italic dark:text-white">WE SIGN</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Connect seamlessly across signing and speaking communities.</p>
+    <div className="flex min-h-[inherit] flex-col items-center justify-center px-5 py-8 text-slate-100">
+      <div className="w-full max-w-md space-y-6 px-1">
+        <div className="page-hero text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 via-blue-500 to-cyan-400 shadow-[0_16px_32px_rgba(59,130,246,0.28)]">
+            <span className="text-xl font-black text-white">WS</span>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-white">WE SIGN</h1>
+            <p className="text-sm text-slate-300">A mobile-first space for signing, speaking, and staying connected.</p>
+          </div>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <span className="soft-chip">Fast login</span>
+            <span className="soft-chip">Live translation</span>
+            <span className="soft-chip">Secure calls</span>
+          </div>
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="card-surface space-y-6 p-6 sm:p-8" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-600 dark:text-slate-300" htmlFor="username">
+            <label className="text-sm font-medium text-slate-200" htmlFor="username">
               Username
             </label>
             <input
@@ -107,7 +117,7 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-600 dark:text-slate-300" htmlFor="password">
+            <label className="text-sm font-medium text-slate-200" htmlFor="password">
               Password
             </label>
             <input
@@ -122,15 +132,15 @@ const Login = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-600 dark:text-slate-300">User Type</label>
+            <label className="text-sm font-medium text-slate-200">User Type</label>
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
                 onClick={() => setIsDeaf(true)}
-                className={`rounded-lg border-2 px-4 py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                className={`float-button rounded-2xl px-4 py-3 text-sm ${
                   isDeaf
-                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
-                    : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                    ? ''
+                    : 'float-button-secondary'
                 }`}
               >
                 <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -141,10 +151,10 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => setIsDeaf(false)}
-                className={`rounded-lg border-2 px-4 py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                className={`float-button rounded-2xl px-4 py-3 text-sm ${
                   !isDeaf
-                    ? 'border-brand-500 bg-brand-500/10 text-brand-300'
-                    : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500'
+                    ? ''
+                    : 'float-button-secondary'
                 }`}
               >
                 <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,7 +166,7 @@ const Login = () => {
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-500/20 p-3 text-sm text-red-300">
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/12 p-3 text-sm text-rose-200">
               {error}
             </div>
           )}
@@ -164,7 +174,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-xl bg-brand-600 px-4 py-3 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="float-button w-full disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </button>

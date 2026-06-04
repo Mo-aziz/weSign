@@ -926,7 +926,7 @@ const CallModal = () => {
       </div>
 
       {/* Translation panel for deaf user */}
-      <div className="bg-white dark:bg-slate-900 p-4 border-t border-slate-200 dark:border-slate-700">
+      <div className="border-t border-white/10 bg-white/5 p-4 backdrop-blur">
         <div className="space-y-3">
           {/* Sign to text preview */}
           <div>
@@ -942,19 +942,19 @@ const CallModal = () => {
                 <textarea
                   value={previewEditText}
                   onChange={(e) => setPreviewEditText(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-gray-800 rounded-lg p-2 border border-blue-500 dark:border-blue-500 text-sm text-gray-900 dark:text-gray-100 font-medium min-h-[60px] resize-none focus:outline-none"
+                  className="input-field min-h-[60px] w-full resize-none rounded-2xl p-2 text-sm font-medium"
                   autoFocus
                 />
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={handleSavePreviewEdit}
-                    className="flex-1 rounded-lg bg-green-500 px-2 py-1 text-xs font-semibold text-white hover:bg-green-600"
+                    className="float-button flex-1 rounded-xl px-2 py-1 text-xs"
                   >
                     ✓ Save
                   </button>
                   <button
                     onClick={handleCancelPreviewEdit}
-                    className="flex-1 rounded-lg bg-gray-400 px-2 py-1 text-xs font-semibold text-white hover:bg-gray-500"
+                    className="float-button float-button-secondary flex-1 rounded-xl px-2 py-1 text-xs"
                   >
                     ✕ Cancel
                   </button>
@@ -964,7 +964,7 @@ const CallModal = () => {
               // View mode
               <div
                 onDoubleClick={handlePreviewDoubleClick}
-                className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 min-h-[60px] border border-gray-200 dark:border-gray-700 cursor-text hover:border-purple-400 transition-colors"
+                className="min-h-[60px] cursor-text rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors hover:border-white/20"
               >
                 <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{previewText || 'Start signing...'}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Double-click to edit)</p>
@@ -1009,7 +1009,7 @@ const CallModal = () => {
           <button
             onClick={() => handleConfirmTranslation(previewText)}
             disabled={!previewText}
-            className="w-full rounded-lg bg-blue-500 dark:bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="float-button w-full rounded-2xl px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
           >
             Confirm & Speak
           </button>
@@ -1021,31 +1021,31 @@ const CallModal = () => {
   const renderHearingInterface = () => (
     <div className="h-full flex flex-col">
       {/* Microphone panel for hearing user */}
-      <div className="bg-gray-50 dark:bg-gray-900 p-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-white/10 bg-white/5 p-4 backdrop-blur">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-black dark:text-gray-100">Microphone</h3>
+            <h3 className="text-lg font-semibold text-white">Microphone</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={handleMicToggle}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`float-button float-button-secondary rounded-xl p-2 ${
                 isMicListening 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-300 text-black'
+                  ? '' 
+                  : ''
               }`}
             >
               {isMicListening ? '🎤' : '🔇'}
             </button>
           </div>
         </div>
-        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 min-h-[80px] border border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-black dark:text-gray-100 font-medium">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 min-h-[80px]">
+          <p className="text-sm font-medium text-white">
             {speechEditable || 'Start speaking...'}
           </p>
           {isSpeechEditing && (
             <p className="text-xs text-blue-500 mt-1">Listening...</p>
           )}
         </div>
-        <div className="mt-2 text-xs text-black dark:text-gray-400">
+        <div className="mt-2 text-xs text-slate-300">
           Status: {isMicListening ? 'Listening' : 'Not listening'} | 
           Editing: {isSpeechEditing ? 'Yes' : 'No'} |
           Text: "{speechEditable || 'Empty'}"
@@ -1053,8 +1053,8 @@ const CallModal = () => {
       </div>
 
       {/* Incoming sign translations */}
-      <div className="flex-1 bg-white dark:bg-slate-900 p-4 overflow-y-auto relative">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What they're signing</h3>
+      <div className="relative flex-1 overflow-y-auto bg-white/5 p-4">
+        <h3 className="mb-3 text-lg font-semibold text-white">What they're signing</h3>
         <div className="space-y-2">
           {translationMessages.filter((msg: TranslationMessage) => msg.isLocal === false).length > 0 ? (
             translationMessages
@@ -1062,15 +1062,15 @@ const CallModal = () => {
               .slice()
               .reverse()
               .map((msg, index) => (
-                <div key={index} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-sm text-slate-900 dark:text-white">{msg.text}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <div key={index} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <p className="text-sm text-white">{msg.text}</p>
+                  <p className="mt-1 text-xs text-slate-300">
                     {formatTimestamp(msg.timestamp)}
                   </p>
                 </div>
               ))
           ) : (
-            <p className="text-slate-500 dark:text-slate-400 text-center py-8">
+            <p className="py-8 text-center text-slate-300">
               Waiting for their signs...
             </p>
           )}
@@ -1079,7 +1079,7 @@ const CallModal = () => {
         {/* End call button - X style at lower part of hearing interface */}
         <button
           onClick={endCall}
-          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
+          className="float-button float-button-danger end-call-button absolute bottom-4 left-1/2 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full p-0"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1090,9 +1090,9 @@ const CallModal = () => {
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-2xl">
       {/* iPhone-style status bar */}
-      <div className="bg-black text-white px-6 py-2 flex justify-between items-center text-xs">
+      <div className="flex items-center justify-between bg-white/5 px-6 py-2 text-xs text-white backdrop-blur">
         <span>
           {callState === 'connected' 
             ? `${Math.floor(elapsedTime / 60)}:${(elapsedTime % 60).toString().padStart(2, '0')}`
@@ -1113,7 +1113,7 @@ const CallModal = () => {
         {callState === 'calling' ? (
           // Calling state - show connecting UI
           <div className="h-full flex flex-col items-center justify-center text-white call-connecting-state">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white text-4xl font-bold mb-8">
+            <div className="mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-blue-500 text-4xl font-bold shadow-[0_20px_50px_rgba(59,130,246,0.25)]">
               {currentCall?.callee?.username?.charAt(0).toUpperCase() || '?'}
             </div>
             <h2 className="text-2xl font-semibold mb-2">
@@ -1124,7 +1124,7 @@ const CallModal = () => {
             {/* End call button - X style at bottom of calling screen */}
             <button
               onClick={endCall}
-              className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
+              className="float-button float-button-danger end-call-button flex h-10 w-10 items-center justify-center rounded-full p-0"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

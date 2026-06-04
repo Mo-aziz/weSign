@@ -22,8 +22,8 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
   const canAcceptCall = !isHeartingToHearing;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+      <div className="card-surface w-full max-w-md p-8">
         <div className="text-center">
           {/* Animated ringing icon */}
           <div className="mb-6 flex justify-center">
@@ -56,7 +56,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
             {' '}is calling you
           </p>
 
-          <div className="mb-6 rounded-2xl bg-slate-800/50 p-4">
+          <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-sm text-slate-400">
               {incomingCall.caller.isDeaf 
                 ? 'Sign language communicator is requesting a video call'
@@ -66,7 +66,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
           </div>
 
           {isHeartingToHearing && (
-            <div className="mb-6 rounded-2xl bg-rose-900/40 border border-rose-700 p-4">
+            <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
               <p className="text-sm text-rose-300 font-semibold">
                 ⚠️ This call cannot be accepted - hearing-to-hearing calls are not allowed.
               </p>
@@ -79,7 +79,7 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
           <div className="flex gap-4">
             <button
               onClick={onReject}
-              className="flex-1 rounded-2xl border-2 border-rose-500 bg-rose-500/10 px-6 py-4 font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white"
+              className="float-button float-button-secondary flex-1 rounded-2xl border-2 border-rose-500 px-6 py-4 font-semibold text-rose-200 hover:border-rose-400 hover:text-white"
             >
               <div className="flex items-center justify-center gap-2">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -94,8 +94,8 @@ const IncomingCallModal: React.FC<IncomingCallModalProps> = ({
               disabled={!canAcceptCall}
               className={`flex-1 rounded-2xl px-6 py-4 font-semibold transition ${
                 canAcceptCall 
-                  ? 'bg-brand-600 text-white hover:bg-brand-500' 
-                  : 'bg-slate-600 text-slate-400 cursor-not-allowed opacity-50'
+                    ? 'float-button' 
+                    : 'cursor-not-allowed bg-slate-600 text-slate-300 opacity-50'
               }`}
               title={!canAcceptCall ? 'Hearing-to-hearing calls are not allowed' : 'Accept call'}
             >

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import fs from 'fs'
 
+const DEFAULT_PROD_BACKEND_URL = 'https://wesign-backend-production-7f55.up.railway.app'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -23,14 +25,22 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     hmr: {
-      host: '192.168.1.171', // Replace with your local IP address
+      host: '192.168.100.80', // Replace with your local IP address
       port: 1420,
       protocol: 'https',
     },
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_BACKEND_URL || 'http://localhost:3000',
+        target:
+          process.env.VITE_DEV_BACKEND_URL ||
+          process.env.VITE_PROD_BACKEND_URL ||
+          DEFAULT_PROD_BACKEND_URL,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('origin');
+          });
+        },
       },
     },
   },

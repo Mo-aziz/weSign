@@ -89,32 +89,32 @@ const Contacts = () => {
   };
 
   return (
-    <div className="space-y-10">
-      <header className="flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-glow">
+    <div className="space-y-8">
+      <header className="page-hero flex flex-col gap-4 p-7">
         <div>
-          <p className="text-sm uppercase tracking-wide text-slate-400">Contacts</p>
-          <h2 className="text-3xl font-semibold text-white">Stay connected with your network</h2>
+          <p className="section-title">Contacts</p>
+          <h2 className="section-heading">Stay connected with your network</h2>
         </div>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-300">
           Add and manage your contacts for seamless communication.
         </p>
       </header>
 
       <section className="card-surface space-y-6 p-6">
         <div>
-          <h3 className="text-lg font-semibold text-white mb-4">Add New Contact</h3>
+          <h3 className="mb-4 text-lg font-semibold text-white">Add New Contact</h3>
           <form className="flex gap-4" onSubmit={handleAddContact}>
             <input
               type="text"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-600 bg-slate-900 px-4 py-3 text-white placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+              className="input-field flex-1"
               placeholder="Enter username"
               required
             />
             <button
               type="submit"
-              className="rounded-lg bg-brand-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors"
+              className="float-button"
             >
               Add Contact
             </button>
@@ -132,40 +132,40 @@ const Contacts = () => {
       </section>
 
       <section className="card-surface space-y-4 p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">
+        <h3 className="mb-4 text-lg font-semibold text-white">
           Your Contacts ({sortedContacts.length})
         </h3>
         {sortedContacts.length === 0 ? (
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-8 text-center">
-            <p className="text-slate-400">No contacts yet. Add your first contact to get started!</p>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+            <p className="text-slate-300">No contacts yet. Add your first contact to get started!</p>
           </div>
         ) : (
           sortedContacts.map((contact) => (
             <div
               key={contact.id}
-              className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/30 p-4 transition-all hover:border-slate-600 hover:bg-slate-800/50"
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 transition-all hover:-translate-y-1 hover:border-white/20 hover:bg-white/8"
             >
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-semibold">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
                   {contact.username.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <p className="font-medium text-white">{contact.username}</p>
-                  <p className="text-sm text-slate-400">ID: {contact.id}</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-white truncate">{contact.username}</p>
+                  <p className="text-sm text-slate-400 truncate">ID: {contact.id}</p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => handleCallContact(contact)}
                   disabled={callState !== 'idle'}
-                  className="rounded-lg bg-brand-600 px-4 py-2 font-semibold text-white shadow-lg hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="float-button rounded-xl px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   title="Call contact"
                 >
                   Call contact
                 </button>
                 <button
                   onClick={() => removeContact(contact.id)}
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-rose-500 hover:bg-rose-500/10 hover:text-rose-200"
+                  className="float-button float-button-secondary rounded-xl px-4 py-2 text-sm hover:border-rose-500 hover:text-rose-100"
                   title="Remove contact"
                 >
                   Remove

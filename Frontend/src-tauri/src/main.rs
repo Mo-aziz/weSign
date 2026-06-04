@@ -19,12 +19,12 @@ enum SignServerProcess {
 }
 
 impl SignServerProcess {
-    fn kill(&mut self) {
+    fn kill(self) {
         match self {
             SignServerProcess::Sidecar(child) => {
                 let _ = child.kill();
             }
-            SignServerProcess::Python(child) => {
+            SignServerProcess::Python(mut child) => {
                 let _ = child.kill();
             }
         }
@@ -128,7 +128,7 @@ fn start_sign_server() {
 
 fn stop_sign_server() {
     if let Ok(mut guard) = SIGN_SERVER_PROCESS.lock() {
-        if let Some(mut process) = guard.take() {
+        if let Some(process) = guard.take() {
             println!("Stopping sign recognition service");
             process.kill();
         }

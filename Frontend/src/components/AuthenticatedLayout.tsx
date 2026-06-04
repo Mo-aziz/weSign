@@ -92,7 +92,7 @@ const AuthenticatedLayout = () => {
         </nav>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto min-h-full w-full max-w-[430px] px-4 py-10">
+          <div className="mx-auto min-h-full w-full px-4 py-10 lg:max-w-5xl lg:px-8 lg:py-12">
             <Outlet />
           </div>
         </main>
