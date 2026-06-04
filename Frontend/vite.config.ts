@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
-import fs from 'fs'
+import { dirname, resolve } from 'node:path'
+import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const certDir = resolve(__dirname, 'certs')
 const keyFile = resolve(certDir, 'key.pem')
 const certFile = resolve(certDir, 'cert.pem')

@@ -16,7 +16,6 @@ import {
   type AppContextValue,
   type AppUser,
   type Contact,
-  type VoiceSettings,
 } from './appContextValue';
 
 const USER_STORAGE_KEY = 'app_user';
