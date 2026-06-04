@@ -1,6 +1,14 @@
 # Flutter → Railway backend
 
-Production API base (no trailing slash):
+Production URLs (copy into Flutter — see `mobile/lib/app_config.dart`):
+
+| Service | URL |
+|---------|-----|
+| REST | `https://wesign-backend-production-7f55.up.railway.app` |
+| Signaling | `wss://signaling-server-production-6bfc.up.railway.app` |
+| Sign AI | `https://testingfinal-production.up.railway.app` |
+
+REST API base (no trailing slash):
 
 ```text
 https://wesign-backend-production-7f55.up.railway.app

@@ -1,37 +1,53 @@
 /**
- * Mobile/cloud API configuration.
- * Vite exposes variables prefixed with VITE_ at build time.
+ * API configuration for dev, production builds, and Railway testing.
  *
- * Required for production mobile builds:
+ * Production Railway URLs (set in .env.production):
  * - VITE_PROD_BACKEND_URL
  * - VITE_PROD_AI_SERVICE_URL
- * Optional:
- * - VITE_PROD_WS_URL (WebSocket signaling)
+ * - VITE_PROD_WS_URL
+ *
+ * Test production from dev server: VITE_USE_PRODUCTION_URLS=true in .env.local
  */
 
 const trimSlash = (url: string) => url.replace(/\/$/, '');
 
-const requireSecureUrlInProduction = (url: string, label: string) => {
-  if (!import.meta.env.PROD) return;
-  if (!/^https:\/\//i.test(url) && !/^wss:\/\//i.test(url)) {
-    throw new Error(`${label} must use HTTPS or WSS in production builds: ${url}`);
-  }
-};
+/** Railway production defaults (used if env vars omitted when production mode is on). */
+export const PRODUCTION_DEFAULTS = {
+  backend: 'https://wesign-backend-production-7f55.up.railway.app',
+  signAi: 'https://testingfinal-production.up.railway.app',
+  signaling: 'wss://signaling-server-production-6bfc.up.railway.app',
+} as const;
 
 export const isProductionBuild = import.meta.env.PROD;
 
-export const getBackendBaseUrl = (): string => {
-  const prod = import.meta.env.VITE_PROD_BACKEND_URL as string | undefined;
-  const dev = import.meta.env.VITE_DEV_BACKEND_URL as string | undefined;
+/** True for release builds OR when forcing Railway URLs in dev (.env.local). */
+export const useProductionServices = (): boolean =>
+  isProductionBuild || import.meta.env.VITE_USE_PRODUCTION_URLS === 'true';
 
-  if (isProductionBuild) {
-    if (!prod) {
-      throw new Error('VITE_PROD_BACKEND_URL is required for production mobile builds.');
-    }
-    requireSecureUrlInProduction(prod, 'VITE_PROD_BACKEND_URL');
-    return trimSlash(prod);
+const requireSecureUrl = (url: string, label: string) => {
+  if (!useProductionServices()) return;
+  if (!/^https:\/\//i.test(url) && !/^wss:\/\//i.test(url)) {
+    throw new Error(`${label} must use HTTPS or WSS: ${url}`);
+  }
+};
+
+const prodBackend = () =>
+  (import.meta.env.VITE_PROD_BACKEND_URL as string | undefined) || PRODUCTION_DEFAULTS.backend;
+
+const prodSignAi = () =>
+  (import.meta.env.VITE_PROD_AI_SERVICE_URL as string | undefined) || PRODUCTION_DEFAULTS.signAi;
+
+const prodWs = () =>
+  (import.meta.env.VITE_PROD_WS_URL as string | undefined) || PRODUCTION_DEFAULTS.signaling;
+
+export const getBackendBaseUrl = (): string => {
+  if (useProductionServices()) {
+    const url = trimSlash(prodBackend());
+    requireSecureUrl(url, 'VITE_PROD_BACKEND_URL');
+    return url;
   }
 
+  const dev = import.meta.env.VITE_DEV_BACKEND_URL as string | undefined;
   if (dev) {
     return trimSlash(dev);
   }
@@ -45,34 +61,27 @@ export const getApiBaseUrl = (): string => {
 };
 
 export const getAiServiceUrl = (): string => {
-  const prod = import.meta.env.VITE_PROD_AI_SERVICE_URL as string | undefined;
+  if (useProductionServices()) {
+    const url = trimSlash(prodSignAi());
+    requireSecureUrl(url, 'VITE_PROD_AI_SERVICE_URL');
+    return url;
+  }
+
   const dev =
     (import.meta.env.VITE_DEV_AI_SERVICE_URL as string | undefined) ||
     'http://127.0.0.1:8001';
-
-  if (isProductionBuild) {
-    if (!prod) {
-      throw new Error('VITE_PROD_AI_SERVICE_URL is required for production mobile builds.');
-    }
-    requireSecureUrlInProduction(prod, 'VITE_PROD_AI_SERVICE_URL');
-    return trimSlash(prod);
-  }
 
   return trimSlash(dev);
 };
 
 export const getWebSocketUrl = (): string | undefined => {
-  const prod = import.meta.env.VITE_PROD_WS_URL as string | undefined;
-  const dev = import.meta.env.VITE_DEV_WS_URL as string | undefined;
-
-  if (isProductionBuild) {
-    if (!prod) {
-      return undefined;
-    }
-    requireSecureUrlInProduction(prod, 'VITE_PROD_WS_URL');
-    return trimSlash(prod);
+  if (useProductionServices()) {
+    const url = trimSlash(prodWs());
+    requireSecureUrl(url, 'VITE_PROD_WS_URL');
+    return url;
   }
 
+  const dev = import.meta.env.VITE_DEV_WS_URL as string | undefined;
   return dev ? trimSlash(dev) : undefined;
 };
 
