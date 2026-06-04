@@ -936,6 +936,11 @@ const CallModal = () => {
                 {signService.serviceError}
               </p>
             )}
+            {signService.recognitionHint && (
+              <p className="mb-2 rounded-lg border border-purple-300 bg-purple-50 px-2 py-1 text-[10px] leading-snug text-purple-900 dark:border-purple-600 dark:bg-purple-950/40 dark:text-purple-100">
+                {signService.recognitionHint}
+              </p>
+            )}
             {previewEditMode ? (
               // Edit mode
               <div>
