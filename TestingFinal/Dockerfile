@@ -2,9 +2,15 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
+# MediaPipe native bindings need OpenGL ES / EGL (libGLESv2.so.2)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
+    libgles2-mesa \
+    libegl1-mesa \
+    libgbm1 \
+    libxrender1 \
+    libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

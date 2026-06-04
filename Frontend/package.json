@@ -5,14 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --mode production",
+    "build:prod": "tsc -b && vite build --mode production",
+    "build:web": "npm run build:prod",
+    "preview:prod": "npm run build:prod && npx serve -s dist -l 4173",
+    "dev:prod": "vite --mode production",
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "build:sign-sidecar": "powershell -ExecutionPolicy Bypass -File ..\\TestingFinal\\build_sign_sidecar.ps1",
-    "server": "node signaling-server.js"
+    "server": "node ../signaling-server/server.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",

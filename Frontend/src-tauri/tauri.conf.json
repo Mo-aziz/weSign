@@ -40,8 +40,8 @@
   },
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "devPath": "https://192.168.100.80:1420",
+    "beforeBuildCommand": "npm run build:prod",
+    "devPath": "https://192.168.1.171:1420",
     "distDir": "../dist"
   }
 }

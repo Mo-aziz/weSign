@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getWebSocketUrl, isProductionBuild } from '../config/appConfig';
+import { getWebSocketUrl, useProductionServices } from '../config/appConfig';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ending';
 
@@ -84,8 +84,8 @@ const getWebSocketURL = (): string => {
     return configured;
   }
 
-  if (isProductionBuild) {
-    throw new Error('VITE_PROD_WS_URL is required for production mobile builds.');
+  if (useProductionServices()) {
+    throw new Error('VITE_PROD_WS_URL is required when using production services.');
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -333,8 +333,10 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ],
     });
 
     // Add local tracks IMMEDIATELY to make offer ready

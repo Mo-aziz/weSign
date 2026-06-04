@@ -1,5 +1,6 @@
 import { type FormEvent, useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/useAppContext';
+import { getUserById } from '../services/userService';
 
 const Contacts = () => {
   const { contacts, addContact, removeContact, user, initiateCall, callState } = useAppContext();
@@ -32,14 +33,18 @@ const Contacts = () => {
     [contacts]
   );
 
-  const handleAddContact = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddContact = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = addContact(contactName);
+    setFeedback('Looking up user on server...');
+    setFeedbackType('info');
+    const result = await addContact(contactName);
     if (result.success) {
-      setFeedback('Contact added successfully.');
+      setFeedback('Contact added. They must be online in the app to receive calls.');
+      setFeedbackType('success');
       setContactName('');
     } else {
       setFeedback(result.message ?? 'Unable to add contact.');
+      setFeedbackType('error');
     }
   };
 
@@ -50,9 +55,12 @@ const Contacts = () => {
     }
     
     try {
-      // For demo purposes, we assume the contact is the opposite type
-      const isContactDeaf = !user?.isDeaf;
-      await initiateCall(contact.id, contact.username, isContactDeaf);
+      const remoteUser = await getUserById(contact.id);
+      await initiateCall(
+        contact.id,
+        contact.username,
+        remoteUser.isDeafMute ?? !user?.isDeaf,
+      );
       // Note: If call is blocked, the error will show via callMessage event listener
       // Only show success if we get here without errors
       setFeedback('Call initiated successfully.');

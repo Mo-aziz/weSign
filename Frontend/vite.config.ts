@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 import fs from 'fs'
 
-const DEFAULT_PROD_BACKEND_URL = 'https://wesign-backend-production-7f55.up.railway.app'
+const certDir = resolve(__dirname, 'certs')
+const keyFile = resolve(certDir, 'key.pem')
+const certFile = resolve(certDir, 'cert.pem')
+const hasDevCerts = fs.existsSync(keyFile) && fs.existsSync(certFile)
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,34 +16,26 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   clearScreen: false,
-  // tauri expects a fixed port, fail if that port is not available
   server: {
-    https: {
-      key: fs.readFileSync(resolve(__dirname, 'certs/key.pem')),
-      cert: fs.readFileSync(resolve(__dirname, 'certs/cert.pem')),
-    },
+    https: hasDevCerts
+      ? {
+          key: fs.readFileSync(keyFile),
+          cert: fs.readFileSync(certFile),
+        }
+      : undefined,
     host: '0.0.0.0', // Listen on all network interfaces (localhost + network)
     port: 1420,
     strictPort: true,
     hmr: {
-      host: '192.168.100.80', // Replace with your local IP address
+      host: '192.168.1.171', // Replace with your local IP address
       port: 1420,
       protocol: 'https',
     },
     proxy: {
       '/api': {
-        target:
-          process.env.VITE_DEV_BACKEND_URL ||
-          process.env.VITE_PROD_BACKEND_URL ||
-          DEFAULT_PROD_BACKEND_URL,
+        target: process.env.VITE_DEV_BACKEND_URL || 'http://localhost:3000',
         changeOrigin: true,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.removeHeader('origin');
-          });
-        },
       },
     },
   },

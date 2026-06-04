@@ -17,6 +17,7 @@ dist-ssr/
 .env
 .env.*
 !.env.example
+!.env.production
 
 # Certificates (each developer generates their own)
 certs/

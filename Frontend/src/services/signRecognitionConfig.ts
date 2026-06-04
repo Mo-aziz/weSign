@@ -1,14 +1,14 @@
-import { getAiServiceUrl, isProductionBuild } from '../config/appConfig';
+import { getAiServiceUrl, useProductionServices } from '../config/appConfig';
 
 export const SIGN_RECOGNITION_SERVICE_URL = getAiServiceUrl();
-export const SIGN_SERVICE_STARTUP_GRACE_MS = isProductionBuild ? 60_000 : 45_000;
+export const SIGN_SERVICE_STARTUP_GRACE_MS = useProductionServices() ? 60_000 : 45_000;
 export const SIGN_HEALTH_POLL_INTERVAL_MS = 1_000;
 
 export const isTauriApp = (): boolean =>
   typeof window !== 'undefined' && '__TAURI__' in window;
 
 export const signServiceUnavailableMessage = (): string => {
-  if (isProductionBuild) {
+  if (useProductionServices()) {
     return (
       'Sign recognition is unavailable. Check your network connection and verify ' +
       'VITE_PROD_AI_SERVICE_URL points to the deployed Railway AI service.'
@@ -29,7 +29,7 @@ export const signServiceUnavailableMessage = (): string => {
 };
 
 export const signServiceStartingMessage = (): string =>
-  isProductionBuild
+  useProductionServices()
     ? 'Connecting to sign recognition cloud service...'
     : isTauriApp()
       ? 'Starting sign recognition service...'

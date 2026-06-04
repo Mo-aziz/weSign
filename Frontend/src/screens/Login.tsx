@@ -65,9 +65,12 @@ const Login = () => {
         throw new Error('User data missing username field');
       }
 
-      console.log('Calling login with:', { username: backendUser.username, isDeaf: backendUser.isDeafMute });
-      
+      if (!backendUser.id) {
+        throw new Error('User data missing id field');
+      }
+
       login({
+        id: backendUser.id,
         username: backendUser.username,
         isDeaf: backendUser.isDeafMute,
       });
