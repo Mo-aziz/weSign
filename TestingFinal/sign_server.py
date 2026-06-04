@@ -24,30 +24,39 @@ DATA_URL_RE = re.compile(r"^data:image/[a-zA-Z+]+;base64,")
 
 DEV_CORS_ORIGINS = [
     "http://localhost:1420",
+    "http://localhost:4173",
     "http://localhost:5173",
     "http://127.0.0.1:1420",
+    "http://127.0.0.1:4173",
     "http://127.0.0.1:5173",
     "https://localhost:1420",
+    "https://localhost:4173",
     "https://127.0.0.1:1420",
+    "https://127.0.0.1:4173",
     "tauri://localhost",
 ]
 
-
-def _is_production() -> bool:
-    return os.getenv("NODE_ENV") == "production" or os.getenv("RAILWAY_ENVIRONMENT") is not None
+# Local dev + Railway-hosted web frontends (when ALLOWED_ORIGINS is not set).
+DEFAULT_ORIGIN_REGEX = (
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+    r"|https://[a-z0-9-]+\.up\.railway\.app"
+)
 
 
 def _parse_allowed_origins() -> list[str]:
-    raw = (
-        os.getenv("ALLOWED_ORIGINS", "")
-        or os.getenv("CLIENT_ORIGIN", "")
-        or os.getenv("CORS_ALLOWED_ORIGINS", "")
-    )
+    raw = os.getenv("ALLOWED_ORIGINS", "")
     configured = [part.strip() for part in raw.split(",") if part.strip()]
-    if _is_production():
-        return configured
-    merged = list(dict.fromkeys([*DEV_CORS_ORIGINS, *configured]))
-    return merged
+    return list(dict.fromkeys([*DEV_CORS_ORIGINS, *configured]))
+
+
+def _parse_origin_regex() -> str | None:
+    custom = os.getenv("CORS_ORIGIN_REGEX", "").strip()
+    if custom:
+        return custom
+    if os.getenv("ALLOWED_ORIGINS", "").strip():
+        # Explicit origin list only — no broad regex.
+        return None
+    return DEFAULT_ORIGIN_REGEX
 
 
 class FrameRequest(BaseModel):
@@ -77,12 +86,11 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="WeSign Sign Recognition", lifespan=lifespan)
 
 _allowed_origins = _parse_allowed_origins()
-# Local React/Vite (e.g. https://localhost:1420) calling Railway AI service
-_local_dev_origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+_allow_origin_regex = _parse_origin_regex()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=_local_dev_origin_regex,
+    allow_origin_regex=_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
