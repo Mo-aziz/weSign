@@ -456,8 +456,12 @@ class SignInferenceEngine:
         )
 
     def process_image_bytes(self, session: SignRecognitionState, image_bytes: bytes) -> dict[str, Any]:
+        if not image_bytes:
+            raise ValueError("Empty image payload")
         arr = np.frombuffer(image_bytes, dtype=np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            frame = cv2.imdecode(np.asarray(bytearray(image_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError("Could not decode image bytes")
         return self.process_bgr_frame(session, frame)

@@ -61,7 +61,7 @@ def _parse_origin_regex() -> str | None:
 
 class FrameRequest(BaseModel):
     sessionId: str = Field(..., min_length=1, max_length=128)
-    image: str = Field(..., description="Base64-encoded JPEG or PNG frame")
+    image: str = Field(..., min_length=32, description="Base64-encoded JPEG or PNG frame")
 
 
 class ResetRequest(BaseModel):
@@ -133,7 +133,17 @@ def process_frame(body: FrameRequest) -> dict[str, Any]:
         result["sessionId"] = session_id
         return result
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # Single bad frame (camera warming up, corrupt JPEG) — keep session alive.
+        return {
+            "ready": False,
+            "text": None,
+            "confidence": 0.0,
+            "state": "skipped_frame",
+            "recorded_frames": 0,
+            "hands_detected": False,
+            "sessionId": session_id,
+            "warning": str(exc),
+        }
 
 
 def _server_port() -> int:

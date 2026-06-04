@@ -8,7 +8,7 @@ export const isTauriApp = (): boolean =>
   typeof window !== 'undefined' && '__TAURI__' in window;
 
 export const signServiceUnavailableMessage = (): string =>
-  'Sign recognition is unavailable. If the Network tab shows CORS errors, redeploy the Sign AI service on Railway (TestingFinal) or set ALLOWED_ORIGINS on that service.';
+  'Sign recognition is unavailable. Check your network, redeploy the Sign AI service (TestingFinal), and ensure your camera is on during the call.';
 
 export const signServiceStartingMessage = (): string =>
   'Connecting to sign recognition cloud service...';

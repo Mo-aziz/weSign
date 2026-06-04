@@ -30,10 +30,15 @@ type FrameResponse = {
   text: string | null;
   confidence: number;
   state: string;
+  hands_detected?: boolean;
 };
 
 const DEFAULT_FRAME_INTERVAL_MS = 100;
-const JPEG_QUALITY = 0.85;
+const JPEG_QUALITY = 0.72;
+const MAX_FRAME_WIDTH = 640;
+const MAX_FRAME_HEIGHT = 480;
+const MIN_FRAME_BASE64_LENGTH = 256;
+const MAX_FRAME_FAILURES_BEFORE_ERROR = 8;
 
 const formatSignText = (raw: string): string => {
   const trimmed = raw.trim();
@@ -55,6 +60,8 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [serviceReady, setServiceReady] = useState(false);
   const [serviceStarting, setServiceStarting] = useState(isTauriApp());
+  const [recognitionState, setRecognitionState] = useState<string | null>(null);
+  const [handsDetected, setHandsDetected] = useState(false);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -64,6 +71,22 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
   const isCapturingRef = useRef(false);
   const sessionIdRef = useRef<string>(createSignSessionId());
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const frameFailureCountRef = useRef(0);
+
+  const parseHttpError = async (response: Response): Promise<string> => {
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') {
+        return body.detail;
+      }
+      if (Array.isArray(body.detail)) {
+        return body.detail.map((item) => JSON.stringify(item)).join('; ');
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return `HTTP ${response.status}`;
+  };
 
   const stopHealthPoll = useCallback(() => {
     if (healthPollRef.current) {
@@ -166,16 +189,35 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
   }, [serviceUrl]);
 
   const getActiveVideo = useCallback((): HTMLVideoElement | null => {
+    const isVideoReady = (video: HTMLVideoElement) =>
+      video.videoWidth > 0 &&
+      video.videoHeight > 0 &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+
     const external = videoElementRef?.current;
-    if (external && external.videoWidth > 0 && external.videoHeight > 0) {
+    if (external && isVideoReady(external)) {
       return external;
     }
     const owned = ownedVideoRef.current;
-    if (owned && owned.videoWidth > 0 && owned.videoHeight > 0) {
+    if (owned && isVideoReady(owned)) {
       return owned;
     }
     return null;
   }, [videoElementRef]);
+
+  const waitForExternalVideo = useCallback(async (): Promise<boolean> => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      if (getActiveVideo()) {
+        return true;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    setServiceError(
+      'Camera preview is not ready. Make sure your camera is on and you can see yourself in the call video.'
+    );
+    return false;
+  }, [getActiveVideo]);
 
   const captureFrameBase64 = useCallback((): string | null => {
     const video = getActiveVideo();
@@ -185,16 +227,32 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       canvasRef.current = document.createElement('canvas');
     }
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    if (width > MAX_FRAME_WIDTH || height > MAX_FRAME_HEIGHT) {
+      const scale = Math.min(MAX_FRAME_WIDTH / width, MAX_FRAME_HEIGHT / height);
+      width = Math.max(1, Math.round(width * scale));
+      height = Math.max(1, Math.round(height * scale));
+    }
+
+    canvas.width = width;
+    canvas.height = height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, width, height);
     const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    if (!dataUrl.startsWith('data:image/jpeg')) {
+      return null;
+    }
     const comma = dataUrl.indexOf(',');
-    return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+    if (base64.length < MIN_FRAME_BASE64_LENGTH) {
+      return null;
+    }
+    return base64;
   }, [getActiveVideo]);
 
   const sendFrame = useCallback(async () => {
@@ -215,20 +273,28 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       });
 
       if (!response.ok) {
-        throw new Error(`Sign service error (${response.status})`);
+        const detail = await parseHttpError(response);
+        throw new Error(`Sign service error (${response.status}): ${detail}`);
       }
 
       const data = (await response.json()) as FrameResponse;
+      frameFailureCountRef.current = 0;
       setServiceError(null);
       setServiceReady(true);
+      setRecognitionState(data.state);
+      setHandsDetected(Boolean(data.hands_detected));
 
       if (data.ready && data.text) {
         setPreviewText(formatSignText(data.text));
       }
     } catch (error) {
+      frameFailureCountRef.current += 1;
+      if (frameFailureCountRef.current < MAX_FRAME_FAILURES_BEFORE_ERROR) {
+        return;
+      }
       const detail = error instanceof Error ? error.message : 'Request failed';
       setServiceReady(false);
-      setServiceError(`${detail}. ${signServiceUnavailableMessage()}`);
+      setServiceError(`${detail}. Make sure your camera is on and showing video in the call.`);
     } finally {
       inFlightRef.current = false;
     }
@@ -280,16 +346,27 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
     const healthy = serviceReady ? true : await waitForServiceHealth();
     if (!healthy) return;
 
-    if (!videoElementRef) {
+    if (videoElementRef) {
+      const ready = await waitForExternalVideo();
+      if (!ready) return;
+    } else {
       const hasVideo = await ensureVideoSource();
       if (!hasVideo) return;
     }
 
+    frameFailureCountRef.current = 0;
     await postReset();
     isCapturingRef.current = true;
     setIsCapturing(true);
     setPreviewText(null);
-  }, [ensureVideoSource, postReset, serviceReady, videoElementRef, waitForServiceHealth]);
+  }, [
+    ensureVideoSource,
+    postReset,
+    serviceReady,
+    videoElementRef,
+    waitForExternalVideo,
+    waitForServiceHealth,
+  ]);
 
   const stopRecognition = useCallback(() => {
     isCapturingRef.current = false;
@@ -353,6 +430,24 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
 
   const clearHistory = useCallback(() => setHistory([]), []);
 
+  const recognitionHint = useMemo((): string | null => {
+    if (serviceError || serviceStarting) return null;
+    if (!isCapturing) return null;
+    if (recognitionState === 'calibrating' && !handsDetected) {
+      return 'Calibrating — show both hands clearly in the camera (upper body visible).';
+    }
+    if (recognitionState === 'calibrating') {
+      return 'Calibrating — keep your hands visible...';
+    }
+    if (recognitionState === 'ready' && !handsDetected) {
+      return 'Ready — start signing when your hands are in view.';
+    }
+    if (recognitionState === 'recording') {
+      return 'Recording your sign... hold the gesture steady.';
+    }
+    return null;
+  }, [handsDetected, isCapturing, recognitionState, serviceError, serviceStarting]);
+
   const state = useMemo(
     () => ({
       isCapturing,
@@ -361,8 +456,21 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       serviceError,
       serviceReady,
       serviceStarting,
+      recognitionState,
+      handsDetected,
+      recognitionHint,
     }),
-    [history, isCapturing, previewText, serviceError, serviceReady, serviceStarting]
+    [
+      history,
+      handsDetected,
+      isCapturing,
+      previewText,
+      recognitionHint,
+      recognitionState,
+      serviceError,
+      serviceReady,
+      serviceStarting,
+    ]
   );
 
   return {
