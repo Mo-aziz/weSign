@@ -889,13 +889,13 @@ const CallModal = () => {
   const renderDeafInterface = () => (
     <div className="h-full flex flex-col">
       {/* Camera for deaf user */}
-      <div className="flex-1 relative bg-black">
+      <div className="relative bg-black flex-shrink-0" style={{ maxHeight: '60vh' }}>
         <video
           ref={localVideoRef}
           autoPlay
           muted
           playsInline
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           style={{ transform: 'scaleX(-1)' }}
           controls={false}
           disablePictureInPicture={true}
@@ -917,9 +917,9 @@ const CallModal = () => {
         {/* End call button - X style at lower part of camera */}
         <button
           onClick={endCall}
-          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
+          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-colors end-call-button"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -1079,9 +1079,9 @@ const CallModal = () => {
         {/* End call button - X style at lower part of hearing interface */}
         <button
           onClick={endCall}
-          className="float-button float-button-danger end-call-button absolute bottom-4 left-1/2 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full p-0"
+          className="float-button float-button-danger end-call-button absolute bottom-4 left-1/2 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full p-0"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -1124,9 +1124,9 @@ const CallModal = () => {
             {/* End call button - X style at bottom of calling screen */}
             <button
               onClick={endCall}
-              className="float-button float-button-danger end-call-button flex h-10 w-10 items-center justify-center rounded-full p-0"
+              className="float-button float-button-danger end-call-button flex h-12 w-12 items-center justify-center rounded-full p-0"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
