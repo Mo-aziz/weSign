@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build --mode production",
     "build:prod": "tsc -b && vite build --mode production",
+    "build:web": "npm run build:prod",
+    "preview:prod": "npm run build:prod && npx serve -s dist -l 4173",
     "dev:prod": "vite --mode production",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -606,7 +606,13 @@ Details: [TestingFinal/README.md](TestingFinal/README.md)
 
 TTS (when used) remains on port **8000**.
 
-## Mobile cloud deployment (Railway)
+## Website deployment (Railway) — recommended for remote calls
+
+Deploy **`Frontend`** as a public HTTPS site. Share the link with your teammate — no Rust/Tauri required.
+
+Guide: **[WEB_DEPLOYMENT.md](WEB_DEPLOYMENT.md)**
+
+## Mobile / cloud APIs (Railway)
 
 For the **mobile app**, production APIs must use deployed **HTTPS** URLs (not `localhost`).
 
