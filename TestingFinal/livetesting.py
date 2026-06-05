@@ -17,7 +17,7 @@ MODEL_HAND     = "mediapipeModels\hand_landmarker (3).task"
 MODEL_FACE     = "mediapipeModels\\face_landmarker.task"
 
 
-MAX_FRAMES           = 40
+MAX_FRAMES           = 20
 INPUT_SIZE           = 190   # 95 nodes * 2 coords 
 NUM_CLASSES = 17
 CLASS_NAMES = ['A', 'D', 'F', 'H', 'O', 'U', 'Y', 'another', 'book', 'brother', 'can', 'hello', 'i', 'my', 'now', 'see', 'you']
