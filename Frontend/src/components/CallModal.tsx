@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppContext } from '../context/useAppContext';
 import { useSignRecognitionService } from '../services/useSignRecognitionService';
+import { usePredictiveText } from '../services/usePredictiveText';
 import { startSpeechRecognition, stopSpeechRecognition } from '../services/localSpeechRecognition';
 
 // Type definitions for message objects
@@ -81,6 +82,27 @@ const CallModal = () => {
 
   // Sign recognition service (uses call camera when available)
   const signService = useSignRecognitionService({ videoElementRef: localVideoRef });
+  
+  // Predictive text suggestions based on what's currently signed
+  const suggestion = usePredictiveText(signService.previewText);
+
+  // Accept suggestion on Spacebar/Tab
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!suggestion || !signService.previewText) return;
+      
+      // Don't trigger if they are typing in the textarea
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+
+      if (e.code === 'Space' || e.code === 'Tab') {
+        e.preventDefault(); // Prevent page scroll / default tabbing
+        signService.appendPreviewText(suggestion);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [suggestion, signService]);
 
   // Speech recognition - EXACT copy of Translation page + sendTranscript + pause detection
   const [speechEditable, setSpeechEditable] = useState('');
@@ -969,9 +991,16 @@ const CallModal = () => {
               // View mode
               <div
                 onDoubleClick={handlePreviewDoubleClick}
-                className="min-h-[60px] cursor-text rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors hover:border-white/20"
+                className="min-h-[60px] cursor-text rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors hover:border-white/20 relative"
               >
-                <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{previewText || 'Start signing...'}</p>
+                <p className="text-sm font-medium">
+                  <span className="text-gray-900 dark:text-gray-100">{previewText || 'Start signing...'}</span>
+                  {suggestion && previewText && (
+                    <span className="text-gray-400 dark:text-gray-500 italic ml-1">
+                      {suggestion} <span className="text-[10px] ml-1 opacity-60">[Press Space]</span>
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Double-click to edit)</p>
               </div>
             )}

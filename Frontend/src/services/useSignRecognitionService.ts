@@ -473,6 +473,13 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
     ]
   );
 
+  const appendPreviewText = useCallback((textToAppend: string) => {
+    setPreviewText((prev) => {
+      if (!prev) return textToAppend;
+      return `${prev} ${textToAppend}`;
+    });
+  }, []);
+
   return {
     ...state,
     startRecognition,
@@ -481,6 +488,7 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
     rejectTranslation,
     clearHistory,
     checkServiceHealth,
+    appendPreviewText,
   };
 };
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getWebSocketUrl } from '../config/appConfig';
+import { startRinging, stopRinging } from './ringtoneService';
 
 export type CallState = 'idle' | 'calling' | 'incoming' | 'connected' | 'ending';
 
@@ -1010,6 +1011,32 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       }
     }
   }, [localStream]);
+
+  // Handling ringtone and call timeout (placed here to access endCall and rejectCall)
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    if (callState === 'calling' || callState === 'incoming') {
+      startRinging();
+      
+      // Set 60-second timeout
+      timeoutId = setTimeout(() => {
+        console.warn('Call timeout reached (60s). Ending call automatically.');
+        if (callState === 'calling') {
+          endCall();
+        } else if (callState === 'incoming') {
+          rejectCall();
+        }
+      }, 60000);
+    } else {
+      stopRinging();
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      stopRinging();
+    };
+  }, [callState, endCall, rejectCall]);
 
   return {
     callState,
