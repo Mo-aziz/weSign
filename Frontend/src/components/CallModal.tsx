@@ -1025,8 +1025,26 @@ const CallModal = () => {
 
   const renderHearingInterface = () => (
     <div className="h-full flex flex-col">
+      {/* Incoming video feed from deaf user */}
+      <div className="relative bg-black flex-shrink-0" style={{ maxHeight: '40vh' }}>
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="w-full h-full object-contain"
+          style={{ transform: 'scaleX(-1)' }}
+          controls={false}
+          disablePictureInPicture={true}
+        />
+        {!remoteStream && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="text-lg font-medium text-white">Waiting for video...</p>
+          </div>
+        )}
+      </div>
+
       {/* Microphone panel for hearing user */}
-      <div className="border-b border-white/10 bg-white/5 p-4 backdrop-blur">
+      <div className="border-b border-white/10 bg-white/5 p-4 backdrop-blur flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold text-white">Microphone</h3>
           <div className="flex items-center gap-2">

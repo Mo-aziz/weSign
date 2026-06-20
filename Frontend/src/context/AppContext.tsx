@@ -17,23 +17,13 @@ import {
   type Contact,
 } from './appContextValue';
 
-const USER_STORAGE_KEY = 'app_user';
+import { fetchContacts, addContactToApi, removeContactFromApi } from '../services/contactService';
 
-const loadStoredContacts = (): Contact[] => {
-  if (typeof window === 'undefined') return DEFAULT_CONTACTS;
-  try {
-    const raw = localStorage.getItem(CONTACTS_STORAGE_KEY);
-    if (!raw) return DEFAULT_CONTACTS;
-    const parsed = JSON.parse(raw) as Contact[];
-    return Array.isArray(parsed) ? parsed : DEFAULT_CONTACTS;
-  } catch {
-    return DEFAULT_CONTACTS;
-  }
-};
+const USER_STORAGE_KEY = 'app_user';
 
 export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>(loadStoredContacts);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -71,8 +61,14 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts));
-  }, [contacts]);
+    if (user?.id) {
+      fetchContacts().then(fetchedContacts => {
+        setContacts(fetchedContacts);
+      });
+    } else {
+      setContacts([]);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -135,8 +131,7 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     clearTokens();
     localStorage.removeItem(USER_STORAGE_KEY);
     setUser(null);
-    setContacts(DEFAULT_CONTACTS);
-    localStorage.removeItem(CONTACTS_STORAGE_KEY);
+    setContacts([]);
   };
 
   const addContact: AppContextValue['addContact'] = useCallback(async (username) => {
@@ -158,6 +153,15 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         return { success: false, message: 'User not found on the server.' };
       }
 
+      if (remoteUser.id === user?.id) {
+        return { success: false, message: 'You cannot add yourself as a contact.' };
+      }
+
+      const addedToApi = await addContactToApi(remoteUser.id);
+      if (!addedToApi) {
+        return { success: false, message: 'Failed to add contact to server.' };
+      }
+
       setContacts((prev) => [
         ...prev,
         { id: remoteUser.id, username: remoteUser.username || trimmed },
@@ -169,10 +173,13 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         message: `User "${trimmed}" not found. They must sign up first (same backend).`,
       };
     }
-  }, [contacts]);
+  }, [contacts, user?.id]);
 
-  const removeContact: AppContextValue['removeContact'] = (contactId) => {
-    setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
+  const removeContact: AppContextValue['removeContact'] = async (contactId) => {
+    const removedFromApi = await removeContactFromApi(contactId);
+    if (removedFromApi) {
+      setContacts((prev) => prev.filter((contact) => contact.id !== contactId));
+    }
   };
 
   const toggleDarkMode = () => {
