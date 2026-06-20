@@ -67,7 +67,7 @@ export const updateUserProfile = async (
  */
 export const checkUsernameExists = async (username: string): Promise<boolean> => {
   try {
-    await apiGet(`/users/check/username/${username}`);
+    await apiGet(`/users/check/username/${encodeURIComponent(username.trim())}`);
     return true;
   } catch {
     return false;

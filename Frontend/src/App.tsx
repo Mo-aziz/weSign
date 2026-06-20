@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
 import Login from './screens/Login'
+import SignUp from './screens/SignUp'
 import Contacts from './screens/Contacts'
 import Settings from './screens/Settings'
 import Translation from './screens/Translation'
@@ -21,6 +22,7 @@ const App = () => {
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<SignUp />} />
             <Route element={<AuthenticatedLayout />}>
               <Route index element={<Navigate to="/contacts" replace />} />
               <Route path="/contacts" element={<Contacts />} />

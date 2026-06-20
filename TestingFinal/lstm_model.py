@@ -7,8 +7,8 @@ import torch.nn as nn
 # T = 200 padded frames
 
 INPUT_SIZE  = 190   # 95 * 2
-HIDDEN_SIZE = 128
-NUM_LAYERS  = 1
+HIDDEN_SIZE = 256
+NUM_LAYERS  = 2
 DROPOUT     = 0.5
 
 
@@ -86,7 +86,7 @@ class SignLSTM(nn.Module):
 
 
 if __name__ == "__main__":
-    model = SignLSTM(num_classes=17)
+    model = SignLSTM(num_classes=37)
     model.eval()
 
     x    = torch.randn(4, 200, 190)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         out = model(x, mask)
 
     print(f"Input shape:  {x.shape}")
-    print(f"Output shape: {out.shape}")   # should be (4, 6)
+    print(f"Output shape: {out.shape}")   # should be (4, 37)
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")

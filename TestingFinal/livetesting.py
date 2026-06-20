@@ -10,22 +10,25 @@ from lstm_model import SignLSTM
 
 # ── Config ───────────────────────────────────────────────────────────────────
 CHECKPOINT     = "best_model.pt" 
-
+#CHECKPOINT     = "checkpointsAugment\\best_model.pt"
 
 MODEL_POSE     = "mediapipeModels\pose_landmarker_lite.task"
 MODEL_HAND     = "mediapipeModels\hand_landmarker (3).task"
 MODEL_FACE     = "mediapipeModels\\face_landmarker.task"
 
 
-MAX_FRAMES           = 20
+MAX_FRAMES           = 40
 INPUT_SIZE           = 190   # 95 nodes * 2 coords 
-NUM_CLASSES = 17
-CLASS_NAMES = ['A', 'D', 'F', 'H', 'O', 'U', 'Y', 'another', 'book', 'brother', 'can', 'hello', 'i', 'my', 'now', 'see', 'you']
+NUM_CLASSES = 37
+CLASS_NAMES = ['and', 'any', 'book', 'can', 'class', 'finish', 'go', 'good',
+               'have', 'hear', 'help', 'i', 'later', 'me', 'morning', 'my',
+               'name', 'now', 'open', 'paper', 'please', 'question', 'see',
+               'start', 'study', 'test', 'time', 'tomorrow', 'wait', 'want',
+               'we', 'what', 'work', 'write', 'yes', 'you', 'your']
 CONFIDENCE_THRESHOLD = 0.50
 CALIBRATION_FRAMES   = 15
 MIN_SIGN_FRAMES      = 10
 RECORDING_START_SKIP = 5   # skip first N frames after S pressed  
-AUTO_START_HOLD_FRAMES = 1  # require hands to be visible for this many frames before auto-starting
 
 FACE_KEY_LANDMARKS = [1,33,133,263,362,70,107,300,336,61,291,0,17,234,454,10,152,93,323,168]
 
@@ -258,14 +261,19 @@ def draw_hud(frame, state, prediction, confidence,
                     (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
     elif state == "idle":
-        cv2.putText(frame, "Press S to record a sign",
-                    (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+        if prediction:
+            cv2.putText(frame, "Show hand to make a new sign",
+                        (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
+        else:
+            cv2.putText(frame, "Show your hand to start",
+                        (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
 
     elif state == "recording":
         cv2.circle(frame, (20, 65), 8, (0, 0, 255), -1)   # red dot
-        cv2.putText(frame, f"Recording...  {recorded_frames} frames  "
-                           f"(press S to stop)",
+        cv2.putText(frame, f"Recording...  {recorded_frames} frames",
                     (35, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.putText(frame, "Remove hand to finish",
+                    (35, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
     if not hands_detected and state not in ("calibrating", "ready"):
         cv2.putText(frame, "NO HANDS DETECTED",
@@ -352,22 +360,15 @@ def main():
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
     # ── State ────────────────────────────────────────────────────────────────
-    state               = "calibrating"
+    state               = "idle"
     calibration_counter = 0
     recorded_frames     = []
     prediction          = None
     confidence          = 0.0
-    hand_visible_frames = 0
-    auto_trigger_armed  = True
 
-    # Last known good landmark lock  
-    
-    last_good_lhand = np.zeros(21 * 3, dtype=np.float32)
-    last_good_rhand = np.zeros(21 * 3, dtype=np.float32)
-
-    print("\n1. Show both hands to camera to calibrate")
-    print("2. After calibration, keep your hands in view to auto-start recording")
-    print("3. S still works as a manual fallback")
+    print("\n1. Just show your hand to camera — recording starts automatically")
+    print("2. Remove hand when done — classification happens automatically")
+    print("3. The word will be displayed on screen")
     print("4. R=reset  Q=quit\n")
 
     while True:
@@ -399,11 +400,6 @@ def main():
         pass
 
         hands_detected = ldet or rdet
-        if hands_detected:
-            hand_visible_frames += 1
-        else:
-            hand_visible_frames = 0
-            auto_trigger_armed = True
 
         # ── Normalize ─────────────────────────────────────────────────────────
         frame_vec = normalize_frame_live(pose, face, lhand, rhand, ldet, rdet) 
@@ -414,35 +410,23 @@ def main():
         print(f"shoulder_dist={shoulder_dist:.4f}", flush=True)
 
         # ── State machine ─────────────────────────────────────────────────────
-        if state == "calibrating":
+        # Auto-start recording when hands detected, auto-stop when lost
+        if state == "idle":
             if hands_detected:
-                calibration_counter += 1
-            else:
-                calibration_counter = 0
-            if calibration_counter >= CALIBRATION_FRAMES:
-                state               = "ready"
-                calibration_counter = 0
-                print("Hands locked — auto-recording will start when hands are visible", flush=True)
-
-        elif state == "ready":
-            if auto_trigger_armed and hands_detected and hand_visible_frames >= AUTO_START_HOLD_FRAMES:
                 state = "recording"
                 recorded_frames = []
-                auto_trigger_armed = False
-                print("Hands detected — auto-recording started...", flush=True)
-
-        elif state == "idle":
-            if auto_trigger_armed and hands_detected and hand_visible_frames >= AUTO_START_HOLD_FRAMES:
-                state = "recording"
-                recorded_frames = []
-                auto_trigger_armed = False
-                print("Hands detected — auto-recording started...", flush=True)
+                prediction = None
+                confidence = 0.0
+                print("Hand detected — recording started...", flush=True)
 
         elif state == "recording":
             recorded_frames.append(frame_vec)
             if len(recorded_frames) >= MAX_FRAMES:
                 state = "classifying"
                 print("Max frames reached — classifying...", flush=True)
+            elif not hands_detected:
+                state = "classifying"
+                print("Hand lost — classifying...", flush=True)
 
         if state == "classifying":     
             if len(recorded_frames) >= MIN_SIGN_FRAMES:
@@ -478,6 +462,7 @@ def main():
 
             state           = "idle"
             recorded_frames = []
+            # Prediction remains displayed until next recording starts
 
         # ── Draw ──────────────────────────────────────────────────────────────
         frame = draw_landmarks(frame, pose_result, hand_result, face_result)
@@ -494,33 +479,23 @@ def main():
             break
 
         if key == ord('s'):
-            if state == "calibrating":
-                state               = "ready"
-                calibration_counter = 0
-                print("Skipped calibration — press S again to start", flush=True)
-            elif state == "ready":
-                state = "idle"
-                print("Ready — hands can now auto-start recording", flush=True)
-            elif state == "idle":
+            # Manual start/stop override (optional)
+            if state == "idle":
                 state           = "recording"
                 recorded_frames = []
-                auto_trigger_armed = False
-                print("Recording — perform your sign...", flush=True)
+                prediction      = None
+                confidence      = 0.0
+                print("Manual start — recording...", flush=True)
             elif state == "recording":
                 state = "classifying"
-                print(f"Stopped — classifying {len(recorded_frames)} frames...",
+                print(f"Manual stop — classifying {len(recorded_frames)} frames...",
                       flush=True)
 
         if key == ord('r'):
-            state               = "calibrating"
-            calibration_counter = 0
+            state               = "idle"
             recorded_frames     = []
             prediction          = None
             confidence          = 0.0
-            hand_visible_frames = 0
-            auto_trigger_armed  = True
-            last_good_lhand     = np.zeros(21 * 3, dtype=np.float32)
-            last_good_rhand     = np.zeros(21 * 3, dtype=np.float32)
             print("Reset.", flush=True)
 
     cap.release()

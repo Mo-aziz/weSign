@@ -1,14 +1,14 @@
 import { type FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/useAppContext';
 import { apiPost, storeTokens, clearTokens } from '../services/apiClient';
+import { checkUsernameExists } from '../services/userService';
 
 const Login = () => {
   const { user, login } = useAppContext();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [isDeaf, setIsDeaf] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,13 +33,18 @@ const Login = () => {
     setError(null);
 
     try {
-      console.log('Sending login request:', { username, password, isDeaf });
-      
+      const trimmedUsername = username.trim();
+      const usernameExists = await checkUsernameExists(trimmedUsername);
+      if (!usernameExists) {
+        throw new Error('Account not found. Please create an account first.');
+      }
+
+      console.log('Sending login request:', { username: trimmedUsername });
+
       // Call backend login API
       const response = await apiPost('/users/login-username', {
-        username: username.trim(),
+        username: trimmedUsername,
         password,
-        isDeaf, // Send deaf/hearing preference
       });
 
       console.log('Login response received:', response);
@@ -134,40 +139,6 @@ const Login = () => {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-200">User Type</label>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setIsDeaf(true)}
-                className={`float-button rounded-2xl px-4 py-3 text-sm ${
-                  isDeaf
-                    ? ''
-                    : 'float-button-secondary'
-                }`}
-              >
-                <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-                <span className="text-sm font-medium">Deaf / Hard of Hearing</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsDeaf(false)}
-                className={`float-button rounded-2xl px-4 py-3 text-sm ${
-                  !isDeaf
-                    ? ''
-                    : 'float-button-secondary'
-                }`}
-              >
-                <svg className="mx-auto mb-2 h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                <span className="text-sm font-medium">Hearing</span>
-              </button>
-            </div>
-          </div>
-
           {error && (
             <div className="rounded-2xl border border-rose-500/30 bg-rose-500/12 p-3 text-sm text-rose-200">
               {error}
@@ -181,6 +152,13 @@ const Login = () => {
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </button>
+
+          <p className="text-center text-sm text-slate-300">
+            New to WeSign?{' '}
+            <Link className="font-semibold" to="/signup">
+              Create an account
+            </Link>
+          </p>
         </form>
       </div>
     </div>
