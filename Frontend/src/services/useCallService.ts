@@ -301,6 +301,113 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     currentCallRef.current = currentCall;
   }, [currentCall]);
 
+  const endCallInternal = useCallback(() => {
+    console.log('🎬 endCallInternal - Starting cleanup...');
+    
+    // CRITICAL: Use refs instead of closures to get CURRENT stream values
+    // Closures can be stale if this function was defined when streams were null
+    const localStreamToClean = localStreamRef.current;
+    const remoteStreamToClean = remoteStreamRef.current;
+    
+    console.log(' Stream references:', {
+      localStream: localStreamToClean ? `${localStreamToClean.getTracks().length} tracks` : 'null',
+      remoteStream: remoteStreamToClean ? `${remoteStreamToClean.getTracks().length} tracks` : 'null'
+    });
+    
+    // Close peer connection first - this will also close data channels
+    if (peerConnectionRef.current) {
+      console.log(' Closing peer connection...');
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+      console.log(' Peer connection closed');
+    }
+    
+    // Stop all tracks in local stream - DISABLE BEFORE STOP for proper cleanup
+    if (localStreamToClean) {
+      console.log(' Stopping local stream tracks:', localStreamToClean.getTracks().length);
+      localStreamToClean.getTracks().forEach(track => {
+        try {
+          console.log(' Stopping local track:', track.kind, '(state:', track.readyState + ')');
+          
+          // CRITICAL: Disable track BEFORE stopping to ensure hardware releases properly
+          track.enabled = false;
+          console.log('  Track disabled');
+          
+          // Now stop the track
+          track.stop();
+          console.log('   Track stopped');
+          
+          // Force stop again if needed
+          if (track.readyState !== 'ended') {
+            track.stop();
+            console.log('  Track force-stopped');
+          }
+        } catch (err) {
+          console.error(' Error stopping local track:', err);
+        }
+      });
+    } else {
+      console.log('  No local stream to clean');
+    }
+    
+    // Stop all tracks in remote stream - DISABLE BEFORE STOP for proper cleanup
+    if (remoteStreamToClean) {
+      console.log(' Stopping remote stream tracks:', remoteStreamToClean.getTracks().length);
+      remoteStreamToClean.getTracks().forEach(track => {
+        try {
+          console.log(' Stopping remote track:', track.kind, '(state:', track.readyState + ')');
+          
+          // CRITICAL: Disable track BEFORE stopping to ensure hardware releases properly
+          track.enabled = false;
+          console.log('   Track disabled');
+          
+          // Now stop the track
+          track.stop();
+          console.log('   Track stopped');
+          
+          // Force stop again if needed
+          if (track.readyState !== 'ended') {
+            track.stop();
+            console.log('   Track force-stopped');
+          }
+        } catch (err) {
+          console.error(' Error stopping remote track:', err);
+        }
+      });
+    } else {
+      console.log('  No remote stream to clean');
+    }
+    
+    // Clear all state
+    console.log(' Clearing all state...');
+    setCallState('idle');
+    setCurrentCall(null);
+    setIncomingCall(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setTranslationMessages([]);
+    setTranscriptMessages([]);
+    
+    console.log(' endCallInternal cleanup complete - Camera & Mic should be OFF');
+  }, []);
+
+  const endCall = useCallback(() => {
+    if (currentCall) {
+      const otherUserId = currentCall.caller.id === currentUserId 
+        ? currentCall.callee.id 
+        : currentCall.caller.id;
+      
+      sendSignalingMessage(otherUserId, {
+        type: 'call-end',
+        callId: currentCall.id,
+        from: currentUserId,
+        to: otherUserId
+      });
+    }
+    
+    endCallInternal();
+  }, [currentCall, currentUserId, endCallInternal]);
+
   const flushPendingDataMessages = useCallback(() => {
     const channel = dataChannelRef.current;
     if (!channel || channel.readyState !== 'open' || pendingDataMessagesRef.current.length === 0) {
@@ -803,113 +910,6 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setIncomingCall(null);
     setCallState('idle');
   }, [incomingCall, currentUserId]);
-
-  const endCallInternal = useCallback(() => {
-    console.log('🎬 endCallInternal - Starting cleanup...');
-    
-    // CRITICAL: Use refs instead of closures to get CURRENT stream values
-    // Closures can be stale if this function was defined when streams were null
-    const localStreamToClean = localStreamRef.current;
-    const remoteStreamToClean = remoteStreamRef.current;
-    
-    console.log(' Stream references:', {
-      localStream: localStreamToClean ? `${localStreamToClean.getTracks().length} tracks` : 'null',
-      remoteStream: remoteStreamToClean ? `${remoteStreamToClean.getTracks().length} tracks` : 'null'
-    });
-    
-    // Close peer connection first - this will also close data channels
-    if (peerConnectionRef.current) {
-      console.log(' Closing peer connection...');
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-      console.log(' Peer connection closed');
-    }
-    
-    // Stop all tracks in local stream - DISABLE BEFORE STOP for proper cleanup
-    if (localStreamToClean) {
-      console.log(' Stopping local stream tracks:', localStreamToClean.getTracks().length);
-      localStreamToClean.getTracks().forEach(track => {
-        try {
-          console.log(' Stopping local track:', track.kind, '(state:', track.readyState + ')');
-          
-          // CRITICAL: Disable track BEFORE stopping to ensure hardware releases properly
-          track.enabled = false;
-          console.log('  Track disabled');
-          
-          // Now stop the track
-          track.stop();
-          console.log('   Track stopped');
-          
-          // Force stop again if needed
-          if (track.readyState !== 'ended') {
-            track.stop();
-            console.log('  Track force-stopped');
-          }
-        } catch (err) {
-          console.error(' Error stopping local track:', err);
-        }
-      });
-    } else {
-      console.log('  No local stream to clean');
-    }
-    
-    // Stop all tracks in remote stream - DISABLE BEFORE STOP for proper cleanup
-    if (remoteStreamToClean) {
-      console.log(' Stopping remote stream tracks:', remoteStreamToClean.getTracks().length);
-      remoteStreamToClean.getTracks().forEach(track => {
-        try {
-          console.log(' Stopping remote track:', track.kind, '(state:', track.readyState + ')');
-          
-          // CRITICAL: Disable track BEFORE stopping to ensure hardware releases properly
-          track.enabled = false;
-          console.log('   Track disabled');
-          
-          // Now stop the track
-          track.stop();
-          console.log('   Track stopped');
-          
-          // Force stop again if needed
-          if (track.readyState !== 'ended') {
-            track.stop();
-            console.log('   Track force-stopped');
-          }
-        } catch (err) {
-          console.error(' Error stopping remote track:', err);
-        }
-      });
-    } else {
-      console.log('  No remote stream to clean');
-    }
-    
-    // Clear all state
-    console.log(' Clearing all state...');
-    setCallState('idle');
-    setCurrentCall(null);
-    setIncomingCall(null);
-    setLocalStream(null);
-    setRemoteStream(null);
-    setTranslationMessages([]);
-    setTranscriptMessages([]);
-    
-    console.log(' endCallInternal cleanup complete - Camera & Mic should be OFF');
-  }, []);
-
-  const endCall = useCallback(() => {
-    if (currentCall) {
-      const otherUserId = currentCall.caller.id === currentUserId 
-        ? currentCall.callee.id 
-        : currentCall.caller.id;
-      
-      sendSignalingMessage(otherUserId, {
-        type: 'call-end',
-        callId: currentCall.id,
-        from: currentUserId,
-        to: otherUserId
-      });
-    }
-    
-    endCallInternal();
-  }, [currentCall, currentUserId, endCallInternal]);
 
   const sendTranslation = useCallback((text: string, shouldSpeak: boolean) => {
     console.log(' sendTranslation called:', { text, shouldSpeak, dataChannelReady: dataChannelRef.current?.readyState === 'open' });
