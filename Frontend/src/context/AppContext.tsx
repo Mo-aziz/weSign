@@ -9,8 +9,6 @@ import {
 } from '../config/appConfig';
 import {
   AppContext,
-  CONTACTS_STORAGE_KEY,
-  DEFAULT_CONTACTS,
   THEME_STORAGE_KEY,
   type AppContextValue,
   type AppUser,
