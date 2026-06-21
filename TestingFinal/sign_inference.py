@@ -31,25 +31,13 @@ MODEL_FACE_PATH = BASE_DIR / "mediapipeModels" / "face_landmarker.task"
 
 MAX_FRAMES = 40
 INPUT_SIZE = 190
-NUM_CLASSES = 17
+NUM_CLASSES = 37
 CLASS_NAMES = [
-    "A",
-    "D",
-    "F",
-    "H",
-    "O",
-    "U",
-    "Y",
-    "another",
-    "book",
-    "brother",
-    "can",
-    "hello",
-    "i",
-    "my",
-    "now",
-    "see",
-    "you",
+    'and', 'any', 'book', 'can', 'class', 'finish', 'go', 'good',
+    'have', 'hear', 'help', 'i', 'later', 'me', 'morning', 'my',
+    'name', 'now', 'open', 'paper', 'please', 'question', 'see',
+    'start', 'study', 'test', 'time', 'tomorrow', 'wait', 'want',
+    'we', 'what', 'work', 'write', 'yes', 'you', 'your'
 ]
 CONFIDENCE_THRESHOLD = 0.50
 CALIBRATION_FRAMES = 15
