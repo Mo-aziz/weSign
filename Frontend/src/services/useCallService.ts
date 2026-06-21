@@ -638,6 +638,9 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
             const pc = createPeerConnection(stream);
             peerConnectionRef.current = pc;
 
+            setIsCameraEnabled(stream.getVideoTracks().length > 0);
+            setIsMicEnabled(stream.getAudioTracks().length > 0);
+
             // Change state to connected since both accepted and media is ready
             setCurrentCall(prev => prev ? { ...prev, state: 'connected' } : null);
             setCallState('connected');
@@ -997,15 +1000,51 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setTranscriptMessages(prev => [...prev, message]);
   }, [currentCall, currentUserId]);
 
-  const toggleCamera = useCallback(() => {
+  const toggleCamera = useCallback(async () => {
     if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+      let videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setIsCameraEnabled(videoTrack.enabled);
+      } else {
+        // No video track exists (Hearing user who started with audio-only)
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          videoTrack = stream.getVideoTracks()[0];
+          
+          localStream.addTrack(videoTrack);
+          setIsCameraEnabled(true);
+          
+          if (peerConnectionRef.current) {
+            peerConnectionRef.current.addTrack(videoTrack, localStream);
+            
+            // Renegotiate offer
+            const offer = await peerConnectionRef.current.createOffer();
+            await peerConnectionRef.current.setLocalDescription(offer);
+            
+            if (currentCallRef.current) {
+              const otherUserId = currentCallRef.current.caller.id === currentUserId 
+                ? currentCallRef.current.callee.id 
+                : currentCallRef.current.caller.id;
+              
+              sendSignalingMessage(otherUserId, {
+                type: 'offer',
+                callId: currentCallRef.current.id,
+                from: currentUserId,
+                to: otherUserId,
+                payload: offer
+              });
+            }
+          }
+          
+          // Force state update to re-render local stream with new track
+          setLocalStream(new MediaStream(localStream.getTracks()));
+        } catch (err) {
+          console.error("Failed to add camera dynamically:", err);
+        }
       }
     }
-  }, [localStream]);
+  }, [localStream, currentUserId]);
 
   const toggleMic = useCallback(() => {
     if (localStream) {

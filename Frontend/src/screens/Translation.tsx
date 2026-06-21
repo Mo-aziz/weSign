@@ -16,11 +16,42 @@ const Translation = () => {
   const [autoListen, setAutoListen] = useState(true);
   const [isInTauri, setIsInTauri] = useState(false);
 
-  const signService = useSignRecognitionService();
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
+  const signService = useSignRecognitionService({ videoElementRef: localVideoRef });
   const ttsService = useTextToSpeechService();
 
   const [signEditable, setSignEditable] = useState('');
   const [isSignEditing, setIsSignEditing] = useState(false);
+
+  const handleStartSign = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false,
+      });
+      setLocalStream(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(console.error);
+      }
+      signService.startRecognition();
+    } catch (err) {
+      console.error('Failed to get camera:', err);
+    }
+  };
+
+  const handleStopSign = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      setLocalStream(null);
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    signService.stopRecognition();
+  };
 
   const [speechEditable, setSpeechEditable] = useState('');
   const [isSpeechEditing, setIsSpeechEditing] = useState(false);
@@ -240,13 +271,13 @@ const Translation = () => {
                   </button>
                 </label>
                 <button
-                  onClick={signService.startRecognition}
+                  onClick={handleStartSign}
                   className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs"
                 >
                   Start
                 </button>
                 <button
-                  onClick={signService.stopRecognition}
+                  onClick={handleStopSign}
                   className="float-button float-button-secondary rounded-xl px-3 py-2 text-xs hover:border-rose-400 hover:text-rose-100"
                 >
                   Stop
@@ -270,7 +301,21 @@ const Translation = () => {
                     {signService.serviceError ?? 'Checking sign recognition service...'}
                   </p>
                 )}
-                <div className="mt-2 h-40 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2 text-sm text-slate-100">
+                <div className="relative mt-2 overflow-hidden rounded-2xl bg-black aspect-video w-full border border-white/10">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover"
+                  />
+                  {!localStream && (
+                    <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-xs">
+                      Camera off
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 h-20 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2 text-sm text-slate-100">
                   <textarea
                     className="h-full w-full resize-none bg-transparent p-2 text-sm text-slate-100 outline-none"
                     value={signEditable}

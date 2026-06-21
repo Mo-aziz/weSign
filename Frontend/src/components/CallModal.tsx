@@ -928,6 +928,21 @@ const CallModal = () => {
           </div>
         )}
         
+        {/* Incoming video feed from hearing user (optional) */}
+        <div className="absolute top-4 left-4 w-32 h-48 bg-black rounded-lg overflow-hidden border-2 border-white/20 shadow-lg z-10 transition-opacity">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+          />
+          {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm">
+              <span className="text-[10px] text-gray-400 font-medium">Camera off</span>
+            </div>
+          )}
+        </div>
+
         {/* Camera toggle button */}
         <button
           onClick={toggleCamera}
@@ -1070,19 +1085,45 @@ const CallModal = () => {
             <p className="text-lg font-medium text-white">Waiting for video...</p>
           </div>
         )}
+
+        {/* Hearing user's own video preview (optional) */}
+        <div className="absolute top-4 right-4 w-28 h-40 bg-black rounded-lg overflow-hidden border-2 border-white/20 shadow-lg z-10 transition-opacity">
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+            style={{ transform: 'scaleX(-1)' }}
+          />
+          {(!localStream || localStream.getVideoTracks().length === 0 || !isCameraEnabled) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 backdrop-blur-sm p-2 text-center text-xs font-medium text-gray-300">
+              <span className="mb-1 text-base">📹</span>
+              Camera Off
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Microphone panel for hearing user */}
+      {/* Controls panel for hearing user */}
       <div className="border-b border-white/10 bg-white/5 p-4 backdrop-blur flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-white">Microphone</h3>
+            <h3 className="text-lg font-semibold text-white">Controls</h3>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleMicToggle}
+              onClick={toggleCamera}
+              title="Toggle Camera"
               className={`float-button float-button-secondary rounded-xl p-2 ${
-                isMicListening 
-                  ? '' 
-                  : ''
+                isCameraEnabled ? '' : 'opacity-50'
+              }`}
+            >
+              {isCameraEnabled ? '📹' : '📵'}
+            </button>
+            <button
+              onClick={handleMicToggle}
+              title="Toggle Microphone"
+              className={`float-button float-button-secondary rounded-xl p-2 ${
+                isMicListening ? '' : 'opacity-50'
               }`}
             >
               {isMicListening ? '🎤' : '🔇'}
