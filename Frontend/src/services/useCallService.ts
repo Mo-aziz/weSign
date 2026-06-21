@@ -521,17 +521,24 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         }
 
         case 'call-accept': {
-          console.log('Received call-accept');
-          // Peer connection should already be created with tracks by initiateCall
-          if (!peerConnectionRef.current) {
-            console.warn('No peer connection on call-accept');
-            break;
-          }
+          console.log('Received call-accept. Getting media and creating offer...');
           
           try {
+            // Get media again (will be instant because of pre-check)
+            const stream = await getMediaStream(isCurrentUserDeaf);
+            setLocalStream(stream);
+            
+            const pc = createPeerConnection(stream);
+            peerConnectionRef.current = pc;
+
+            // Change state to connected since both accepted and media is ready
+            setCurrentCall(prev => prev ? { ...prev, state: 'connected' } : null);
+            setCallState('connected');
+            
             console.log('Creating offer');
-            const offer = await peerConnectionRef.current.createOffer();
-            await peerConnectionRef.current.setLocalDescription(offer);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
             console.log('Sending offer');
             sendSignalingMessage(message.from!, {
               type: 'offer',
@@ -541,7 +548,8 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
               payload: offer
             });
           } catch (error) {
-            console.error('Failed to create offer:', error);
+            console.error('Failed to handle call-accept or create offer:', error);
+            endCallInternal();
           }
           break;
         }
@@ -630,7 +638,7 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
         unsubscribeRef.current();
       }
     };
-  }, [currentUserId, currentUsername, isCurrentUserDeaf]);
+  }, [currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream, createPeerConnection, endCallInternal]);
 
   const initiateCall = useCallback(async (contactId: string, contactUsername: string, isContactDeaf: boolean) => {
     try {
@@ -675,21 +683,18 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       };
       
       console.log('=== INITIATE CALL ===', { caller: newCall.caller.username, isDeaf: isCurrentUserDeaf });
+      
+      // PERMISSION PRE-CHECK: Get media to prompt user, then immediately stop it so the light goes off
+      console.log('Pre-checking media permissions...');
+      const tempStream = await getMediaStream(isCurrentUserDeaf);
+      tempStream.getTracks().forEach(track => track.stop());
+      console.log('Permissions granted. Camera light turned off for ringing phase.');
+      
+      // Set state to calling (this triggers the ringing sound)
       setCurrentCall(newCall);
       setCallState('calling');
       
-      // GET MEDIA AND CREATE PEER CONNECTION WITH TRACKS BEFORE SENDING ANY MESSAGE
-      console.log('Requesting media...');
-      const stream = await getMediaStream(isCurrentUserDeaf);
-      setLocalStream(stream);
-      
-      console.log('Creating peer connection with tracks...');
-      const pc = createPeerConnection(stream);
-      peerConnectionRef.current = pc;
-      
-      // Now mark as connected (peer connection ready with tracks)
-      setCurrentCall(prev => prev ? { ...prev, state: 'connected' } : null);
-      setCallState('connected');
+      // DO NOT create peer connection or set localStream yet. Wait for call-accept.
       
       // THEN send call invite
       console.log('Sending call-invite');
@@ -708,7 +713,7 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       setLocalStream(null);
       throw error;
     }
-  }, [currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream, createPeerConnection]);
+  }, [currentUserId, currentUsername, isCurrentUserDeaf, getMediaStream]);
 
   const acceptCall = useCallback(async () => {
     if (!incomingCall) return;
