@@ -314,6 +314,11 @@ const Translation = () => {
                       Camera off
                     </div>
                   )}
+                  {signService.recognitionHint && (
+                    <div className="absolute bottom-3 left-3 right-3 text-center bg-black/70 text-amber-300 text-xs py-1.5 px-3 rounded-lg backdrop-blur-sm font-semibold border border-amber-500/30">
+                      {signService.recognitionHint}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 h-20 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2 text-sm text-slate-100">
                   <textarea

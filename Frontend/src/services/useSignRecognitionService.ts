@@ -31,6 +31,7 @@ type FrameResponse = {
   confidence: number;
   state: string;
   hands_detected?: boolean;
+  recorded_frames?: number;
 };
 
 const DEFAULT_FRAME_INTERVAL_MS = 33;
@@ -62,6 +63,7 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
   const [serviceStarting, setServiceStarting] = useState(isTauriApp());
   const [recognitionState, setRecognitionState] = useState<string | null>(null);
   const [handsDetected, setHandsDetected] = useState(false);
+  const [recordedFrames, setRecordedFrames] = useState(0);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -72,6 +74,7 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
   const sessionIdRef = useRef<string>(createSignSessionId());
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const frameFailureCountRef = useRef(0);
+  const isResultAppendedRef = useRef(false);
 
   const parseHttpError = async (response: Response): Promise<string> => {
     try {
@@ -283,9 +286,22 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       setServiceReady(true);
       setRecognitionState(data.state);
       setHandsDetected(Boolean(data.hands_detected));
+      setRecordedFrames(data.recorded_frames ?? 0);
+
+      if (data.state === 'recording' || data.state === 'calibrating') {
+        isResultAppendedRef.current = false;
+      }
 
       if (data.ready && data.text) {
-        setPreviewText(formatSignText(data.text));
+        if (!isResultAppendedRef.current) {
+          isResultAppendedRef.current = true;
+          setPreviewText((prev) => {
+            if (!prev) return formatSignText(data.text!);
+            const newWord = data.text!.trim().toLowerCase();
+            const formatted = newWord === 'i' ? 'I' : newWord;
+            return `${prev} ${formatted}`;
+          });
+        }
       }
     } catch (error) {
       frameFailureCountRef.current += 1;
@@ -448,10 +464,10 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       return 'Ready — start signing when your hands are in view.';
     }
     if (recognitionState === 'recording') {
-      return 'Recording your sign... hold the gesture steady.';
+      return `Recording your sign... (${recordedFrames}/40) hold the gesture steady.`;
     }
     return null;
-  }, [handsDetected, isCapturing, recognitionState, serviceError, serviceStarting]);
+  }, [handsDetected, isCapturing, recognitionState, serviceError, serviceStarting, recordedFrames]);
 
   const state = useMemo(
     () => ({
@@ -463,11 +479,13 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
       serviceStarting,
       recognitionState,
       handsDetected,
+      recordedFrames,
       recognitionHint,
     }),
     [
       history,
       handsDetected,
+      recordedFrames,
       isCapturing,
       previewText,
       recognitionHint,
