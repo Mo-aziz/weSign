@@ -382,6 +382,8 @@ class SignInferenceEngine:
             session.recorded_frames.append(frame_vec)
             if len(session.recorded_frames) >= MAX_FRAMES:
                 session.state = "classifying"
+            elif not hands_detected:
+                session.state = "classifying"
 
         if session.state == "classifying":
             return self._run_classification(session)
