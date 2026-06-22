@@ -927,6 +927,11 @@ const CallModal = () => {
             <p className="text-lg font-medium text-white">Camera off</p>
           </div>
         )}
+        {signService.recognitionHint && (
+          <div className="absolute bottom-20 left-4 right-4 text-center bg-black/70 text-amber-300 text-sm py-2 px-3 rounded-lg backdrop-blur-sm font-semibold border border-amber-500/30">
+            {signService.recognitionHint}
+          </div>
+        )}
         
         {/* Incoming video feed from hearing user (optional) */}
         <div className="absolute top-4 left-4 w-32 h-48 bg-black rounded-lg overflow-hidden border-2 border-white/20 shadow-lg z-10 transition-opacity">
@@ -971,11 +976,6 @@ const CallModal = () => {
             {!signService.serviceReady && signService.serviceError && (
               <p className="mb-2 rounded-lg border border-amber-400 bg-amber-50 px-2 py-1 text-[10px] leading-snug text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-100">
                 {signService.serviceError}
-              </p>
-            )}
-            {signService.recognitionHint && (
-              <p className="mb-2 rounded-lg border border-purple-300 bg-purple-50 px-2 py-1 text-[10px] leading-snug text-purple-900 dark:border-purple-600 dark:bg-purple-950/40 dark:text-purple-100">
-                {signService.recognitionHint}
               </p>
             )}
             {previewEditMode ? (

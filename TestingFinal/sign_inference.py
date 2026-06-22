@@ -263,11 +263,8 @@ class SignRecognitionState:
     """Frame-sequence state for one client session."""
 
     def __init__(self) -> None:
-        self._timestamp_ms = 0
+        self._timestamp_ms = int(time.time() * 1000)
         self._last_hands_detected = False
-        self.reset()
-
-    def reset(self) -> None:
         self.state = "calibrating"
         self.calibration_counter = 0
         self.recorded_frames: list[np.ndarray] = []
@@ -275,8 +272,15 @@ class SignRecognitionState:
         self.confidence = 0.0
         self.hand_visible_frames = 0
         self.auto_trigger_armed = True
-        self._timestamp_ms = int(time.time() * 1000)
-        self._last_hands_detected = False
+
+    def reset(self) -> None:
+        if self.state != "calibrating":
+            self.state = "idle"
+        self.recorded_frames = []
+        self.prediction = None
+        self.confidence = 0.0
+        self.hand_visible_frames = 0
+        self.auto_trigger_armed = True
 
     def next_timestamp_ms(self) -> int:
         self._timestamp_ms += 33
