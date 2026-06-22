@@ -33,7 +33,7 @@ type FrameResponse = {
   hands_detected?: boolean;
 };
 
-const DEFAULT_FRAME_INTERVAL_MS = 100;
+const DEFAULT_FRAME_INTERVAL_MS = 33;
 const JPEG_QUALITY = 0.72;
 const MAX_FRAME_WIDTH = 640;
 const MAX_FRAME_HEIGHT = 480;
@@ -171,7 +171,7 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
 
   const stopFrameLoop = useCallback(() => {
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
   }, []);
@@ -386,11 +386,16 @@ export const useSignRecognitionService = (options: RecognitionOptions = {}) => {
 
     if (intervalRef.current) return;
 
-    intervalRef.current = setInterval(() => {
-      void sendFrame();
-    }, frameInterval);
+    const loop = async () => {
+      if (!isCapturingRef.current) return;
+      const start = Date.now();
+      await sendFrame();
+      const elapsed = Date.now() - start;
+      const delay = Math.max(0, frameInterval - elapsed);
+      intervalRef.current = setTimeout(loop, delay) as any;
+    };
 
-    void sendFrame();
+    void loop();
 
     return () => {
       stopFrameLoop();
