@@ -1,0 +1,39 @@
+%%{init: {'theme':'dark'}}%%
+flowchart TD
+    Camera(["Webcam Video Stream"]) --> Extract["Extract Video Frame<br/>Every 33ms"]
+    
+    subgraph Frontend ["React / Tauri App"]
+        direction TB
+        Extract --> Canvas["Resize to 640x480<br/>Draw to Canvas"]
+        Canvas --> Encode["Convert to Base64 JPEG<br/>Compression: 72%"]
+    end
+    
+    Encode -->|HTTP POST /frame| API["Python AI Service Endpoint"]
+    
+    subgraph AI_Service ["AI Model Service (Python)"]
+        direction TB
+        API --> Decode["Decode Base64 Image"]
+        Decode --> MediaPipe["Hand Landmark Detection<br/>(e.g., MediaPipe)"]
+        MediaPipe --> Preprocess["Extract & Normalize<br/>Coordinates"]
+        Preprocess --> LSTM["Machine Learning Model<br/>Inference"]
+        LSTM --> Confidence{"Confidence ><br/>Threshold?"}
+        Confidence -->|Yes| Output["Select Highest<br/>Probability Sign"]
+        Confidence -->|No| Ignore["Ignore Frame / Wait"]
+    end
+    
+    Output -->|HTTP 200 OK Response| UI
+    
+    subgraph Frontend_Update ["Frontend UI"]
+        direction TB
+        UI["Parse JSON Response"] --> Update["Update Preview Text State"]
+        Update --> Display(["Show Translated Text to User"])
+    end
+    
+    %% Styling
+    classDef blue fill:#003366,stroke:#03a9f4,stroke-width:2px;
+    classDef green fill:#004d00,stroke:#4caf50,stroke-width:2px;
+    classDef gray fill:#333333,stroke:#888888,stroke-width:2px;
+    
+    class Frontend,Frontend_Update blue;
+    class AI_Service green;
+    class Camera,Display gray;

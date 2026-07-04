@@ -1,0 +1,33 @@
+sequenceDiagram
+    autonumber
+    
+    participant F1 as Frontend (User 1)
+    participant AI as AI Model Service
+    participant Backend as Node.js WebSocket Server
+    participant F2 as Frontend (User 2)
+
+    Note over F1, F2: 1. Call Initialization & WebRTC Signaling
+    F1->>Backend: WSS (WebSocket) - Join Call Room
+    F2->>Backend: WSS (WebSocket) - Join Call Room
+    F1->>Backend: WSS - send 'webrtc:offer'
+    Backend->>F2: WSS - relay 'webrtc:offer'
+    F2->>Backend: WSS - send 'webrtc:answer'
+    Backend->>F1: WSS - relay 'webrtc:answer'
+    F1-->>F2: WebRTC - Exchange ICE Candidates (via Backend)
+    F1<==>F2: WebRTC (P2P) - Direct Video/Audio Stream Established
+
+    Note over F1, AI: 2. AI Sign Language Recognition Loop
+    loop Every 33ms
+        F1->>F1: Capture Camera Frame
+        F1->>AI: HTTP POST /frame (Base64 Image)
+        AI->>AI: Run ML Inference
+        AI-->>F1: HTTP Response (state, text, confidence)
+        F1->>F1: Update UI Preview Text
+    end
+
+    Note over F1, F2: 3. Transcript Translation & TTS
+    F1->>F1: User Confirms Translation
+    F1->>Backend: WSS - send 'call:transcript' (Text)
+    Backend->>F2: WSS - relay 'call:transcript' (Text)
+    F2->>F2: Display Text on Screen
+    F2->>F2: Web Speech API - Text-to-Speech (Audio)

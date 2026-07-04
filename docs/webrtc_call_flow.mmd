@@ -1,0 +1,46 @@
+%%{init: {'theme':'dark'}}%%
+sequenceDiagram
+    autonumber
+    
+    participant Caller
+    participant Backend as "Signaling Server"
+    participant STUN as "STUN/TURN Server"
+    participant Callee
+
+    Note over Caller, Callee: 1. Call Initiation & WebRTC Setup
+    Caller->>Backend: WSS joinCall(callId)
+    Callee->>Backend: WSS joinCall(callId)
+    
+    Caller->>Caller: Create RTCPeerConnection
+    Callee->>Callee: Create RTCPeerConnection
+    
+    Note over Caller, Backend: 2. Offer & Answer Exchange
+    Caller->>Caller: Create Offer (SDP)
+    Caller->>Caller: setLocalDescription(Offer)
+    Caller->>Backend: WSS send webrtc:offer (SDP)
+    Backend->>Callee: WSS relay webrtc:offer
+    
+    Callee->>Callee: setRemoteDescription(Offer)
+    Callee->>Callee: Create Answer (SDP)
+    Callee->>Callee: setLocalDescription(Answer)
+    Callee->>Backend: WSS send webrtc:answer (SDP)
+    Backend->>Caller: WSS relay webrtc:answer
+    
+    Caller->>Caller: setRemoteDescription(Answer)
+    
+    Note over Caller, Callee: 3. ICE Candidate Gathering
+    Caller->>STUN: Request Public IP/Port
+    STUN-->>Caller: Return ICE Candidates
+    Caller->>Backend: WSS send webrtc:iceCandidate
+    Backend->>Callee: WSS relay webrtc:iceCandidate
+    Callee->>Callee: addIceCandidate()
+    
+    Callee->>STUN: Request Public IP/Port
+    STUN-->>Callee: Return ICE Candidates
+    Callee->>Backend: WSS send webrtc:iceCandidate
+    Backend->>Caller: WSS relay webrtc:iceCandidate
+    Caller->>Caller: addIceCandidate()
+    
+    Note over Caller, Callee: 4. Peer-to-Peer Connection Established
+    Caller-->>Callee: Direct Video/Audio Streaming
+    Callee-->>Caller: Direct Video/Audio Streaming

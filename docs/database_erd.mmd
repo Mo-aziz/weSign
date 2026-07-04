@@ -1,0 +1,58 @@
+%%{init: {'theme':'dark'}}%%
+erDiagram
+    USER ||--o{ USER : "has contacts"
+    USER ||--o{ CALL_SESSION : "is caller"
+    USER ||--o{ CALL_SESSION : "is deafUser"
+    USER ||--o{ CONVERSATION : "initiates"
+    CALL_SESSION ||--o{ TRANSCRIPT_ITEM : "contains"
+    CONVERSATION ||--o{ CONVERSATION_MESSAGE : "contains"
+
+    USER {
+        ObjectId _id PK
+        String firstName
+        String lastName
+        String username
+        String phoneNumber
+        String email
+        Date dob
+        String password
+        Boolean isDeafMute
+        String[] deviceTokens
+        Date createdAt
+        Date updatedAt
+    }
+
+    CALL_SESSION {
+        ObjectId _id PK
+        ObjectId callerId FK
+        ObjectId deafUserId FK
+        String status
+        Date startedAt
+        Date endedAt
+        Date createdAt
+        Date updatedAt
+    }
+
+    TRANSCRIPT_ITEM {
+        String from
+        String text
+        Date createdAt
+    }
+
+    CONVERSATION {
+        ObjectId _id PK
+        ObjectId userId FK
+        String locationType
+        String status
+        Date startedAt
+        Date endedAt
+        Date createdAt
+        Date updatedAt
+    }
+
+    CONVERSATION_MESSAGE {
+        String from
+        String text
+        String language
+        Date createdAt
+    }

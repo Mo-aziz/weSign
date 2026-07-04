@@ -1,0 +1,69 @@
+%%{init: {'theme':'dark'}}%%
+flowchart TD
+    Client(["Frontend / Mobile Client"])
+    
+    subgraph REST_API ["REST API (HTTP/HTTPS)"]
+        direction LR
+        
+        subgraph Users ["/api/users"]
+            direction TB
+            U1["POST /register"]
+            U2["POST /login"]
+            U3["POST /login-username"]
+            U4["GET /me"]
+            U5["GET /me/contacts"]
+            U6["POST /me/contacts/:id"]
+            U7["PUT /:id"]
+        end
+        
+        subgraph Calls ["/api/calls"]
+            direction TB
+            C1["POST /"]
+            C2["POST /:id/accept"]
+            C3["POST /:id/end"]
+            C4["POST /:id/transcript"]
+            C5["GET /:id"]
+        end
+        
+        subgraph Conversations ["/api/conversations"]
+            direction TB
+            Msg1["POST /"]
+            Msg2["POST /:id/messages"]
+            Msg3["GET /:id"]
+        end
+    end
+    
+    subgraph WebSocket ["WebSocket Server (WSS)"]
+        direction LR
+        
+        subgraph Room_Management ["Room Management"]
+            direction TB
+            WS1["emit 'joinCall'"]
+            WS2["emit 'joinConversation'"]
+        end
+        
+        subgraph WebRTC_Signaling ["WebRTC Signaling"]
+            direction TB
+            WS3["emit 'webrtc:offer'"]
+            WS4["emit 'webrtc:answer'"]
+            WS5["emit 'webrtc:iceCandidate'"]
+        end
+        
+        subgraph Real_Time_Data ["Real-Time Data"]
+            direction TB
+            WS6["emit 'call:transcript'"]
+            WS7["emit 'conversation:message'"]
+        end
+    end
+
+    Client -->|HTTP POST/GET/PUT/DELETE| REST_API
+    Client <-->|Socket.io events| WebSocket
+
+    %% Styling
+    classDef get fill:#003366,stroke:#03a9f4,stroke-width:2px;
+    classDef post fill:#004d00,stroke:#4caf50,stroke-width:2px;
+    classDef ws fill:#663300,stroke:#ff9800,stroke-width:2px;
+    
+    class U4,U5,C5,Msg3 get;
+    class U1,U2,U3,U6,C1,C2,C3,C4,Msg1,Msg2 post;
+    class WS1,WS2,WS3,WS4,WS5,WS6,WS7 ws;
