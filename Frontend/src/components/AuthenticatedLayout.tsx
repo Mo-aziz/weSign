@@ -10,8 +10,18 @@ const navItems = [
 ];
 
 const AuthenticatedLayout = () => {
-  const { user, logout, incomingCall, acceptCall, rejectCall, callState, currentCall } = useAppContext();
+  const {
+    user,
+    logout,
+    incomingCall,
+    acceptCall,
+    rejectCall,
+    callState,
+    currentCall,
+    incomingRequests,
+  } = useAppContext();
   const location = useLocation();
+  const pendingRequestCount = incomingRequests.length;
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
@@ -43,7 +53,14 @@ const AuthenticatedLayout = () => {
                   }`
                 }
               >
-                <p className="text-sm font-semibold">{item.label}</p>
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  {item.label}
+                  {item.to === '/contacts' && pendingRequestCount > 0 && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                      {pendingRequestCount}
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
               </NavLink>
             ))}
@@ -85,7 +102,14 @@ const AuthenticatedLayout = () => {
                 }`
               }
             >
-              <span>{item.label}</span>
+              <span className="flex items-center gap-1.5">
+                {item.label}
+                {item.to === '/contacts' && pendingRequestCount > 0 && (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                    {pendingRequestCount}
+                  </span>
+                )}
+              </span>
               <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">{item.description}</span>
             </NavLink>
           ))}

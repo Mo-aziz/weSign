@@ -2,11 +2,32 @@ import { type FormEvent, useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../context/useAppContext';
 import { getUserById } from '../services/userService';
 
+const formatRequestTime = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
 const Contacts = () => {
-  const { contacts, addContact, removeContact, user, initiateCall, callState } = useAppContext();
+  const {
+    contacts,
+    incomingRequests,
+    outgoingRequests,
+    sendContactRequest,
+    acceptContactRequest,
+    rejectContactRequest,
+    cancelContactRequest,
+    removeContact,
+    user,
+    initiateCall,
+    callState,
+  } = useAppContext();
   const [contactName, setContactName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('info');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   // Listen for call-blocked events from the signaling service
   useEffect(() => {
@@ -16,7 +37,6 @@ const Contacts = () => {
       if (detail && detail.type === 'call-blocked') {
         setFeedback((detail.reason || 'Call blocked') as string);
         setFeedbackType('error');
-        // Auto-dismiss after 3 seconds
         const timer = setTimeout(() => {
           setFeedback(null);
         }, 3000);
@@ -30,22 +50,46 @@ const Contacts = () => {
 
   const sortedContacts = useMemo(
     () => [...contacts].sort((a, b) => a.username.localeCompare(b.username)),
-    [contacts]
+    [contacts],
   );
 
-  const handleAddContact = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSendRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback('Looking up user on server...');
     setFeedbackType('info');
-    const result = await addContact(contactName);
+    const result = await sendContactRequest(contactName);
     if (result.success) {
-      setFeedback('Contact added. They must be online in the app to receive calls.');
+      setFeedback(result.message ?? 'Contact request sent.');
       setFeedbackType('success');
       setContactName('');
     } else {
-      setFeedback(result.message ?? 'Unable to add contact.');
+      setFeedback(result.message ?? 'Unable to send contact request.');
       setFeedbackType('error');
     }
+  };
+
+  const handleAcceptRequest = async (requestId: string) => {
+    setActionLoadingId(requestId);
+    const result = await acceptContactRequest(requestId);
+    setActionLoadingId(null);
+    setFeedback(result.message ?? (result.success ? 'Contact request accepted.' : 'Failed to accept request.'));
+    setFeedbackType(result.success ? 'success' : 'error');
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setActionLoadingId(requestId);
+    await rejectContactRequest(requestId);
+    setActionLoadingId(null);
+    setFeedback('Contact request rejected.');
+    setFeedbackType('info');
+  };
+
+  const handleCancelRequest = async (requestId: string) => {
+    setActionLoadingId(requestId);
+    await cancelContactRequest(requestId);
+    setActionLoadingId(null);
+    setFeedback('Contact request cancelled.');
+    setFeedbackType('info');
   };
 
   const handleCallContact = async (contact: { id: string; username: string }) => {
@@ -61,17 +105,13 @@ const Contacts = () => {
         contact.username,
         remoteUser.isDeafMute ?? !user?.isDeaf,
       );
-      // Note: If call is blocked, the error will show via callMessage event listener
-      // Only show success if we get here without errors
       setFeedback('Call initiated successfully.');
       setFeedbackType('success');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
-      // Skip showing feedback for call-blocked errors - they show via event listener
       if (errorMessage.includes('call-blocked')) {
         console.log('Call blocked - error shown via event listener');
-        // Don't set feedback - let the event listener handle it
         setFeedbackType('error');
         return;
       }
@@ -104,14 +144,51 @@ const Contacts = () => {
           <h2 className="section-heading">Stay connected with your network</h2>
         </div>
         <p className="text-sm text-slate-300">
-          Add and manage your contacts for seamless communication.
+          Send contact requests and manage your connections.
         </p>
       </header>
 
+      {incomingRequests.length > 0 && (
+        <section className="card-surface space-y-4 p-6">
+          <h3 className="text-lg font-semibold text-white">
+            Incoming Requests ({incomingRequests.length})
+          </h3>
+          <div className="space-y-3">
+            {incomingRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col gap-3 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-white">{request.fromUser.username}</p>
+                  <p className="text-xs text-slate-400">Sent {formatRequestTime(request.createdAt)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleAcceptRequest(request.id)}
+                    disabled={actionLoadingId === request.id}
+                    className="float-button rounded-xl px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => handleRejectRequest(request.id)}
+                    disabled={actionLoadingId === request.id}
+                    className="float-button float-button-secondary rounded-xl px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="card-surface space-y-6 p-6">
         <div>
-          <h3 className="mb-4 text-lg font-semibold text-white">Add New Contact</h3>
-          <form className="flex gap-4" onSubmit={handleAddContact}>
+          <h3 className="mb-4 text-lg font-semibold text-white">Send Contact Request</h3>
+          <form className="flex gap-4" onSubmit={handleSendRequest}>
             <input
               type="text"
               value={contactName}
@@ -124,7 +201,7 @@ const Contacts = () => {
               type="submit"
               className="float-button"
             >
-              Add Contact
+              Send Request
             </button>
           </form>
           {feedback && (
@@ -139,13 +216,43 @@ const Contacts = () => {
         </div>
       </section>
 
+      {outgoingRequests.length > 0 && (
+        <section className="card-surface space-y-4 p-6">
+          <h3 className="text-lg font-semibold text-white">
+            Sent Requests ({outgoingRequests.length})
+          </h3>
+          <div className="space-y-3">
+            {outgoingRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-white">{request.toUser.username}</p>
+                  <p className="text-xs text-slate-400">
+                    Pending · Sent {formatRequestTime(request.createdAt)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleCancelRequest(request.id)}
+                  disabled={actionLoadingId === request.id}
+                  className="float-button float-button-secondary rounded-xl px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="card-surface space-y-4 p-6">
         <h3 className="mb-4 text-lg font-semibold text-white">
           Your Contacts ({sortedContacts.length})
         </h3>
         {sortedContacts.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-            <p className="text-slate-300">No contacts yet. Add your first contact to get started!</p>
+            <p className="text-slate-300">No contacts yet. Send a request to get started!</p>
           </div>
         ) : (
           sortedContacts.map((contact) => (

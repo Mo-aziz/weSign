@@ -10,6 +10,9 @@ type TranscriptMessage = { text: string; timestamp: number; shouldSpeak: boolean
 
 const formatTimestamp = (timestamp: number) => new Date(timestamp).toLocaleTimeString();
 
+const hasActiveVideo = (stream: MediaStream | null): boolean =>
+  Boolean(stream?.getVideoTracks().some((track) => track.enabled && track.readyState === 'live'));
+
 const CallModal = () => {
   const { 
     user, 
@@ -30,6 +33,7 @@ const CallModal = () => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const [remoteCameraOn, setRemoteCameraOn] = useState(false);
 
   // Initialize speech synthesis
   useEffect(() => {
@@ -43,42 +47,64 @@ const CallModal = () => {
     initSpeechSynthesis();
   }, []);
 
-  // Set video streams - single unified effect
+  // Local preview: only bind video when this user has chosen to turn their camera on
   useEffect(() => {
     if (!localVideoRef.current) return;
 
-    // If we have a stream from context, use it
-    if (localStream) {
-      console.log('Setting local video stream from context:', localStream);
+    if (localStream && isCameraEnabled && hasActiveVideo(localStream)) {
       localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(err => {
+      localVideoRef.current.play().catch((err) => {
         console.error('Failed to play local video:', err);
       });
-      return; // Done, don't try to request new stream
+      return;
     }
 
-    console.log('No local stream available yet, waiting for context to provide it...');
-  }, [localStream]);
+    localVideoRef.current.srcObject = null;
+  }, [localStream, isCameraEnabled]);
+
+  // Remote preview: only show when the other user has their camera on
+  useEffect(() => {
+    if (!remoteStream) {
+      setRemoteCameraOn(false);
+      return;
+    }
+
+    const refreshRemoteCamera = () => {
+      setRemoteCameraOn(hasActiveVideo(remoteStream));
+    };
+
+    refreshRemoteCamera();
+
+    const tracks = remoteStream.getVideoTracks();
+    tracks.forEach((track) => {
+      track.addEventListener('ended', refreshRemoteCamera);
+      track.addEventListener('mute', refreshRemoteCamera);
+      track.addEventListener('unmute', refreshRemoteCamera);
+    });
+
+    return () => {
+      tracks.forEach((track) => {
+        track.removeEventListener('ended', refreshRemoteCamera);
+        track.removeEventListener('mute', refreshRemoteCamera);
+        track.removeEventListener('unmute', refreshRemoteCamera);
+      });
+    };
+  }, [remoteStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      console.log('Setting remote video stream:', remoteStream);
+    if (!remoteVideoRef.current) return;
+
+    if (remoteStream && remoteCameraOn) {
       remoteVideoRef.current.srcObject = remoteStream;
       remoteVideoRef.current.playsInline = true;
-      
-      // Force video to play
-      remoteVideoRef.current.play().catch(err => {
-        console.log('Remote video immediate play failed:', err);
+      remoteVideoRef.current.play().catch((err) => {
+        console.log('Remote video play failed:', err);
       });
-      
-      remoteVideoRef.current.onloadedmetadata = () => {
-        console.log('Remote video metadata loaded, attempting play');
-        remoteVideoRef.current?.play().catch(err => {
-          console.error('Remote video play failed on metadata:', err);
-        });
-      };
+      return;
     }
-  }, [remoteStream]);
+
+    remoteVideoRef.current.srcObject = null;
+  }, [remoteStream, remoteCameraOn]);
 
   // Sign recognition service (uses call camera when available)
   const signService = useSignRecognitionService({ videoElementRef: localVideoRef });
@@ -922,11 +948,11 @@ const CallModal = () => {
           controls={false}
           disablePictureInPicture={true}
         />
-        {!localStream && (
+        {!isCameraEnabled || !hasActiveVideo(localStream) ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="text-lg font-medium text-white">Camera off</p>
           </div>
-        )}
+        ) : null}
         {signService.recognitionHint && (
           <div className="absolute bottom-20 left-4 right-4 text-center bg-black/70 text-amber-300 text-sm py-2 px-3 rounded-lg backdrop-blur-sm font-semibold border border-amber-500/30">
             {signService.recognitionHint}
@@ -941,7 +967,7 @@ const CallModal = () => {
             playsInline
             className="w-full h-full object-cover"
           />
-          {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
+          {!remoteCameraOn && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm">
               <span className="text-[10px] text-gray-400 font-medium">Camera off</span>
             </div>
@@ -1080,9 +1106,9 @@ const CallModal = () => {
           controls={false}
           disablePictureInPicture={true}
         />
-        {!remoteStream && (
+        {!remoteCameraOn && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <p className="text-lg font-medium text-white">Waiting for video...</p>
+            <p className="text-lg font-medium text-white">Camera off</p>
           </div>
         )}
 
@@ -1096,12 +1122,12 @@ const CallModal = () => {
             className="w-full h-full object-cover"
             style={{ transform: 'scaleX(-1)' }}
           />
-          {(!localStream || localStream.getVideoTracks().length === 0 || !isCameraEnabled) && (
+          {!isCameraEnabled || !hasActiveVideo(localStream) ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 backdrop-blur-sm p-2 text-center text-xs font-medium text-gray-300">
               <span className="mb-1 text-base">📹</span>
               Camera Off
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

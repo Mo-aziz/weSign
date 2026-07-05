@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useCallService } from '../services/useCallService';
+import { useCallService, notifyContactRequest } from '../services/useCallService';
 import { clearTokens, getAccessToken } from '../services/apiClient';
 import { getUserByUsername, getUserProfile } from '../services/userService';
 import {
@@ -13,15 +13,28 @@ import {
   type AppContextValue,
   type AppUser,
   type Contact,
+  type ContactRequest,
 } from './appContextValue';
 
-import { fetchContacts, addContactToApi, removeContactFromApi } from '../services/contactService';
+import {
+  fetchContacts,
+  fetchIncomingRequests,
+  fetchOutgoingRequests,
+  sendContactRequest as sendContactRequestApi,
+  acceptContactRequest as acceptContactRequestApi,
+  rejectContactRequest as rejectContactRequestApi,
+  cancelContactRequest as cancelContactRequestApi,
+  removeContactFromApi,
+} from '../services/contactService';
 
 const USER_STORAGE_KEY = 'app_user';
+const CONTACT_REQUEST_POLL_MS = 30_000;
 
 export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<ContactRequest[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<ContactRequest[]>([]);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -50,6 +63,20 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     toggleMic,
   } = useCallService(user?.id ?? '', user?.username ?? '', user?.isDeaf ?? false);
 
+  const refreshContactRequests = useCallback(async () => {
+    if (!user?.id) return;
+
+    const [incoming, outgoing, fetchedContacts] = await Promise.all([
+      fetchIncomingRequests(),
+      fetchOutgoingRequests(),
+      fetchContacts(),
+    ]);
+
+    setIncomingRequests(incoming);
+    setOutgoingRequests(outgoing);
+    setContacts(fetchedContacts);
+  }, [user?.id]);
+
   useEffect(() => {
     console.log('[WeSign] Service endpoints', {
       api: getApiBaseUrl(),
@@ -60,13 +87,34 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (user?.id) {
-      fetchContacts().then(fetchedContacts => {
-        setContacts(fetchedContacts);
-      });
+      void refreshContactRequests();
     } else {
       setContacts([]);
+      setIncomingRequests([]);
+      setOutgoingRequests([]);
     }
-  }, [user?.id]);
+  }, [user?.id, refreshContactRequests]);
+
+  // Poll for contact request updates while logged in
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const intervalId = setInterval(() => {
+      void refreshContactRequests();
+    }, CONTACT_REQUEST_POLL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [user?.id, refreshContactRequests]);
+
+  // Real-time contact request updates via signaling WebSocket
+  useEffect(() => {
+    const handleContactRequestUpdate = () => {
+      void refreshContactRequests();
+    };
+
+    window.addEventListener('contactRequestUpdate', handleContactRequestUpdate);
+    return () => window.removeEventListener('contactRequestUpdate', handleContactRequestUpdate);
+  }, [refreshContactRequests]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -130,12 +178,14 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(USER_STORAGE_KEY);
     setUser(null);
     setContacts([]);
+    setIncomingRequests([]);
+    setOutgoingRequests([]);
   };
 
-  const addContact: AppContextValue['addContact'] = useCallback(async (username) => {
+  const sendContactRequest: AppContextValue['sendContactRequest'] = useCallback(async (username) => {
     const trimmed = username.trim();
     if (!trimmed) {
-      return { success: false, message: 'Enter a username before adding a contact.' };
+      return { success: false, message: 'Enter a username before sending a request.' };
     }
 
     const exists = contacts.some(
@@ -143,6 +193,13 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     );
     if (exists) {
       return { success: false, message: 'That contact is already saved.' };
+    }
+
+    const pendingOutgoing = outgoingRequests.some(
+      (request) => request.toUser.username.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (pendingOutgoing) {
+      return { success: false, message: 'You already sent a request to this user.' };
     }
 
     try {
@@ -155,23 +212,79 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         return { success: false, message: 'You cannot add yourself as a contact.' };
       }
 
-      const addedToApi = await addContactToApi(remoteUser.id);
-      if (!addedToApi) {
-        return { success: false, message: 'Failed to add contact to server.' };
+      const result = await sendContactRequestApi(remoteUser.id);
+      if (!result.success) {
+        return { success: false, message: result.message ?? 'Failed to send contact request.' };
       }
 
-      setContacts((prev) => [
-        ...prev,
-        { id: remoteUser.id, username: remoteUser.username || trimmed },
-      ]);
-      return { success: true };
+      if (result.autoAccepted && result.contact) {
+        setContacts((prev) => [...prev, result.contact!]);
+        setOutgoingRequests((prev) =>
+          prev.filter((request) => request.toUser.id !== remoteUser.id),
+        );
+        notifyContactRequest(remoteUser.id, user!.id, 'accepted');
+        return {
+          success: true,
+          autoAccepted: true,
+          message: `${result.contact.username} is now your contact.`,
+        };
+      }
+
+      await refreshContactRequests();
+      notifyContactRequest(remoteUser.id, user!.id, 'sent');
+      return {
+        success: true,
+        message: `Request sent to ${remoteUser.username}. Waiting for them to accept.`,
+      };
     } catch {
       return {
         success: false,
         message: `User "${trimmed}" not found. They must sign up first (same backend).`,
       };
     }
-  }, [contacts, user?.id]);
+  }, [contacts, outgoingRequests, user?.id, refreshContactRequests]);
+
+  const acceptContactRequest: AppContextValue['acceptContactRequest'] = useCallback(async (requestId) => {
+    const result = await acceptContactRequestApi(requestId);
+    if (!result.success) {
+      return { success: false, message: result.message ?? 'Failed to accept request.' };
+    }
+
+    if (result.contact) {
+      setContacts((prev) => {
+        if (prev.some((contact) => contact.id === result.contact!.id)) {
+          return prev;
+        }
+        return [...prev, result.contact!];
+      });
+      notifyContactRequest(result.contact.id, user!.id, 'accepted');
+    }
+
+    setIncomingRequests((prev) => prev.filter((request) => request.id !== requestId));
+    return { success: true, message: result.message };
+  }, [user?.id]);
+
+  const rejectContactRequest: AppContextValue['rejectContactRequest'] = useCallback(async (requestId) => {
+    const request = incomingRequests.find((item) => item.id === requestId);
+    const rejected = await rejectContactRequestApi(requestId);
+    if (rejected) {
+      setIncomingRequests((prev) => prev.filter((item) => item.id !== requestId));
+      if (request && user?.id) {
+        notifyContactRequest(request.fromUser.id, user.id, 'rejected');
+      }
+    }
+  }, [incomingRequests, user?.id]);
+
+  const cancelContactRequest: AppContextValue['cancelContactRequest'] = useCallback(async (requestId) => {
+    const request = outgoingRequests.find((item) => item.id === requestId);
+    const cancelled = await cancelContactRequestApi(requestId);
+    if (cancelled) {
+      setOutgoingRequests((prev) => prev.filter((item) => item.id !== requestId));
+      if (request && user?.id) {
+        notifyContactRequest(request.toUser.id, user.id, 'cancelled');
+      }
+    }
+  }, [outgoingRequests, user?.id]);
 
   const removeContact: AppContextValue['removeContact'] = async (contactId) => {
     const removedFromApi = await removeContactFromApi(contactId);
@@ -197,10 +310,16 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       user,
       contacts,
+      incomingRequests,
+      outgoingRequests,
       darkMode,
       login,
       logout,
-      addContact,
+      sendContactRequest,
+      acceptContactRequest,
+      rejectContactRequest,
+      cancelContactRequest,
+      refreshContactRequests,
       removeContact,
       toggleDarkMode,
       updateUser,
@@ -225,8 +344,14 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     [
       user,
       contacts,
+      incomingRequests,
+      outgoingRequests,
       darkMode,
-      addContact,
+      sendContactRequest,
+      acceptContactRequest,
+      rejectContactRequest,
+      cancelContactRequest,
+      refreshContactRequests,
       callState,
       currentCall,
       incomingCall,

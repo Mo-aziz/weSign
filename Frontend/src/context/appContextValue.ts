@@ -22,13 +22,28 @@ export type Contact = {
   username: string;
 };
 
+export type ContactRequest = {
+  id: string;
+  fromUser: Contact;
+  toUser: Contact;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  createdAt: string;
+  updatedAt?: string;
+};
+
 export type AppContextValue = {
   user: AppUser | null;
   contacts: Contact[];
+  incomingRequests: ContactRequest[];
+  outgoingRequests: ContactRequest[];
   darkMode: boolean;
   login: (payload: { id: string; username: string; isDeaf: boolean }) => void;
   logout: () => void;
-  addContact: (username: string) => Promise<{ success: boolean; message?: string }>;
+  sendContactRequest: (username: string) => Promise<{ success: boolean; message?: string; autoAccepted?: boolean }>;
+  acceptContactRequest: (requestId: string) => Promise<{ success: boolean; message?: string }>;
+  rejectContactRequest: (requestId: string) => Promise<void>;
+  cancelContactRequest: (requestId: string) => Promise<void>;
+  refreshContactRequests: () => Promise<void>;
   removeContact: (contactId: string) => void;
   toggleDarkMode: () => void;
   updateUser: (updates: Partial<Omit<AppUser, 'id'>>) => void;

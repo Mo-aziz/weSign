@@ -118,7 +118,8 @@ function attachWebSocket(server) {
           case 'answer':
           case 'ice-candidate':
           case 'sign-translation':
-          case 'speech-transcript': {
+          case 'speech-transcript':
+          case 'contact-request-notify': {
             const targetWs = clients.get(data.to);
             if (targetWs && targetWs.ws.readyState === 1) {
               targetWs.ws.send(JSON.stringify(data));

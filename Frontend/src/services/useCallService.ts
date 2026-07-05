@@ -29,7 +29,8 @@ type MessageType =
   | 'sign-translation'
   | 'speech-transcript'
   | 'user-status'
-  | 'user-update';
+  | 'user-update'
+  | 'contact-request-notify';
 
 interface SignalingMessage {
   type: MessageType;
@@ -237,10 +238,6 @@ export const queryUserType = async (userId: string): Promise<boolean> => {
   });
 };
 
-/**
- * Update user type on the server (called when user changes their type in Settings)
- * This ensures the server has the latest user type for call validation
- */
 export const updateUserTypeOnServer = async (newIsDeaf: boolean): Promise<void> => {
   if (!lastConnectParams) {
     throw new Error('User not registered yet - WebSocket connection not initialized');
@@ -269,6 +266,26 @@ export const updateUserTypeOnServer = async (newIsDeaf: boolean): Promise<void> 
   }
 };
 
+export type ContactRequestNotifyAction = 'sent' | 'accepted' | 'rejected' | 'cancelled';
+
+/** Notify another user about a contact-request change via the signaling WebSocket */
+export const notifyContactRequest = (
+  toUserId: string,
+  fromUserId: string,
+  action: ContactRequestNotifyAction,
+): void => {
+  try {
+    sendSignalingMessage(toUserId, {
+      type: 'contact-request-notify',
+      from: fromUserId,
+      to: toUserId,
+      payload: { action },
+    });
+  } catch (error) {
+    console.warn('Could not send contact-request notification (user may be offline):', error);
+  }
+};
+
 export const useCallService = (currentUserId: string, currentUsername: string, isCurrentUserDeaf: boolean): CallHookReturn => {
   const [callState, setCallState] = useState<CallState>('idle');
   const [currentCall, setCurrentCall] = useState<CallData | null>(null);
@@ -277,7 +294,8 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [translationMessages, setTranslationMessages] = useState<TranslationMessage[]>([]);
   const [transcriptMessages, setTranscriptMessages] = useState<TranslationMessage[]>([]);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  // Deaf users need camera for signing; hearing users start audio-only with camera off
+  const [isCameraEnabled, setIsCameraEnabled] = useState(isCurrentUserDeaf);
   const [isMicEnabled, setIsMicEnabled] = useState(true);
   
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -387,9 +405,11 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setRemoteStream(null);
     setTranslationMessages([]);
     setTranscriptMessages([]);
+    setIsCameraEnabled(isCurrentUserDeaf);
+    setIsMicEnabled(true);
     
     console.log(' endCallInternal cleanup complete - Camera & Mic should be OFF');
-  }, []);
+  }, [isCurrentUserDeaf]);
 
   const endCall = useCallback(() => {
     if (currentCall) {
@@ -439,7 +459,19 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
 
     pc.ontrack = (event) => {
       console.log('✓ Received remote track:', event.track.kind);
-      setRemoteStream(event.streams[0]);
+      const incomingStream = event.streams[0];
+      const nextStream = incomingStream ?? new MediaStream([event.track]);
+      setRemoteStream(new MediaStream(nextStream.getTracks()));
+
+      const refreshRemoteStream = () => {
+        const current = remoteStreamRef.current;
+        if (!current) return;
+        setRemoteStream(new MediaStream(current.getTracks()));
+      };
+
+      event.track.addEventListener('ended', refreshRemoteStream);
+      event.track.addEventListener('mute', refreshRemoteStream);
+      event.track.addEventListener('unmute', refreshRemoteStream);
     };
 
     pc.onicecandidate = (event) => {
@@ -638,8 +670,8 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
             const pc = createPeerConnection(stream);
             peerConnectionRef.current = pc;
 
-            setIsCameraEnabled(stream.getVideoTracks().length > 0);
-            setIsMicEnabled(stream.getAudioTracks().length > 0);
+            setIsCameraEnabled(stream.getVideoTracks().some((track) => track.enabled));
+            setIsMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
 
             // Change state to connected since both accepted and media is ready
             setCurrentCall(prev => prev ? { ...prev, state: 'connected' } : null);
@@ -736,6 +768,13 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
             console.log('📡 Adding signaling speech-transcript (marked as isLocal: false):', message.payload);
             setTranscriptMessages(prev => [...prev, { ...message.payload as TranslationMessage, isLocal: false }]);
           }
+          break;
+        }
+
+        case 'contact-request-notify': {
+          window.dispatchEvent(new CustomEvent('contactRequestUpdate', {
+            detail: message.payload,
+          }));
           break;
         }
       }
@@ -882,6 +921,9 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
       console.log('Creating peer connection with tracks...');
       const pc = createPeerConnection(stream);
       peerConnectionRef.current = pc;
+
+      setIsCameraEnabled(stream.getVideoTracks().some((track) => track.enabled));
+      setIsMicEnabled(stream.getAudioTracks().some((track) => track.enabled));
       
       // Notify caller
       console.log('Sending call-accept');
@@ -1000,51 +1042,82 @@ export const useCallService = (currentUserId: string, currentUsername: string, i
     setTranscriptMessages(prev => [...prev, message]);
   }, [currentCall, currentUserId]);
 
+  const renegotiateConnection = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    const call = currentCallRef.current;
+    if (!pc || !call) return;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const otherUserId = call.caller.id === currentUserId
+      ? call.callee.id
+      : call.caller.id;
+
+    sendSignalingMessage(otherUserId, {
+      type: 'offer',
+      callId: call.id,
+      from: currentUserId,
+      to: otherUserId,
+      payload: offer,
+    });
+  }, [currentUserId]);
+
   const toggleCamera = useCallback(async () => {
-    if (localStream) {
-      let videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsCameraEnabled(videoTrack.enabled);
-      } else {
-        // No video track exists (Hearing user who started with audio-only)
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          videoTrack = stream.getVideoTracks()[0];
-          
-          localStream.addTrack(videoTrack);
-          setIsCameraEnabled(true);
-          
-          if (peerConnectionRef.current) {
-            peerConnectionRef.current.addTrack(videoTrack, localStream);
-            
-            // Renegotiate offer
-            const offer = await peerConnectionRef.current.createOffer();
-            await peerConnectionRef.current.setLocalDescription(offer);
-            
-            if (currentCallRef.current) {
-              const otherUserId = currentCallRef.current.caller.id === currentUserId 
-                ? currentCallRef.current.callee.id 
-                : currentCallRef.current.caller.id;
-              
-              sendSignalingMessage(otherUserId, {
-                type: 'offer',
-                callId: currentCallRef.current.id,
-                from: currentUserId,
-                to: otherUserId,
-                payload: offer
-              });
-            }
-          }
-          
-          // Force state update to re-render local stream with new track
-          setLocalStream(new MediaStream(localStream.getTracks()));
-        } catch (err) {
-          console.error("Failed to add camera dynamically:", err);
-        }
+    if (!localStream) return;
+
+    const videoTrack = localStream.getVideoTracks()[0];
+    const cameraIsOn = Boolean(videoTrack?.enabled && videoTrack.readyState === 'live');
+
+    // Turn camera off — only affects this user's stream
+    if (cameraIsOn && videoTrack) {
+      videoTrack.enabled = false;
+      videoTrack.stop();
+      localStream.removeTrack(videoTrack);
+
+      const videoSender = peerConnectionRef.current
+        ?.getSenders()
+        .find((sender) => sender.track?.kind === 'video');
+      if (videoSender) {
+        await videoSender.replaceTrack(null);
       }
+
+      setIsCameraEnabled(false);
+      setLocalStream(new MediaStream(localStream.getTracks()));
+
+      try {
+        await renegotiateConnection();
+      } catch (err) {
+        console.error('Failed to renegotiate after turning camera off:', err);
+      }
+      return;
     }
-  }, [localStream, currentUserId]);
+
+    // Turn camera on — request video only for this user
+    try {
+      const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const newVideoTrack = videoStream.getVideoTracks()[0];
+
+      localStream.addTrack(newVideoTrack);
+
+      const videoSender = peerConnectionRef.current
+        ?.getSenders()
+        .find((sender) => sender.track === null || sender.track?.kind === 'video');
+
+      if (videoSender) {
+        await videoSender.replaceTrack(newVideoTrack);
+      } else if (peerConnectionRef.current) {
+        peerConnectionRef.current.addTrack(newVideoTrack, localStream);
+      }
+
+      setIsCameraEnabled(true);
+      setLocalStream(new MediaStream(localStream.getTracks()));
+
+      await renegotiateConnection();
+    } catch (err) {
+      console.error('Failed to turn camera on:', err);
+    }
+  }, [localStream, renegotiateConnection]);
 
   const toggleMic = useCallback(() => {
     if (localStream) {
