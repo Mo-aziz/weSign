@@ -35,6 +35,10 @@ class SessionManager:
     def shutdown(self) -> None:
         self._stop.set()
         self._thread.join(timeout=2)
+        with self._lock:
+            for tracked in self._sessions.values():
+                tracked.state.close()
+            self._sessions.clear()
 
     def _cleanup_loop(self) -> None:
         while not self._stop.wait(self.cleanup_interval_seconds):
@@ -50,7 +54,8 @@ class SessionManager:
                 if now - tracked.last_access > self.ttl_seconds
             ]
             for session_id in expired:
-                del self._sessions[session_id]
+                tracked = self._sessions.pop(session_id)
+                tracked.state.close()
                 removed += 1
         return removed
 

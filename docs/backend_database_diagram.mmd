@@ -1,0 +1,149 @@
+flowchart TB
+    subgraph CLIENT_LAYER["CLIENT LAYER"]
+        direction LR
+        FE["Frontend App<br/>(React + TypeScript)"]
+        FE_FEATURES["REST Client · JWT Auth<br/>Socket.io Client · Signaling WS"]
+    end
+
+    FE --> FE_FEATURES
+
+    subgraph BACKEND_LAYER["BACKEND SERVER LAYER — Node.js + Express (Port 3000)"]
+        direction TB
+
+        subgraph EXPRESS_CORE["Express Core"]
+            direction LR
+            HELMET["Helmet<br/>(Security Headers)"]
+            CORS["CORS<br/>(Cross-Origin)"]
+            MORGAN["Morgan<br/>(Logging)"]
+            RATE["Rate Limiter<br/>(Auth Routes)"]
+            SWAGGER["Swagger UI<br/>(API Docs)"]
+            JSON["JSON Body Parser"]
+        end
+
+        subgraph MIDDLEWARE["Middleware"]
+            direction LR
+            AUTH["authenticate<br/>JWT Bearer Token"]
+            VALIDATE["authValidation<br/>register · login · update"]
+        end
+
+        subgraph API_ROUTER["API Router — /api"]
+            direction TB
+
+            subgraph USER_MODULE["/users — User Module"]
+                direction TB
+                UR["user.routes.js"]
+                UC["user.controller.js"]
+                CRC["contactRequest.controller.js"]
+                UR --> UC
+                UR --> CRC
+            end
+
+            subgraph CALL_MODULE["/calls — Call Module"]
+                direction TB
+                CR["call.routes.js"]
+                CC["call.controller.js"]
+                CR --> CC
+            end
+
+            subgraph CONV_MODULE["/conversations — Conversation Module"]
+                direction TB
+                CVR["conversation.routes.js"]
+                CVC["conversation.controller.js"]
+                CVR --> CVC
+            end
+        end
+
+        subgraph SERVICES["Services & Utils"]
+            direction LR
+            TOKENS["tokens.js<br/>JWT Access / Refresh"]
+            NOTIFY["notifications.js<br/>Push Stub (FCM/APNs)"]
+            VIEWS["user.view.js<br/>Response Shaping"]
+        end
+    end
+
+    subgraph REALTIME_LAYER["REAL-TIME LAYER"]
+        direction TB
+
+        subgraph SOCKETIO["Socket.io Server (same HTTP server)"]
+            direction LR
+            SIO_JOIN["joinCall · joinConversation"]
+            SIO_WEBRTC["webrtc:offer · answer · iceCandidate"]
+            SIO_STREAM["call:transcript · conversation:message"]
+        end
+
+        subgraph SIGNALING["Signaling Server — WebSocket (Port 3001)"]
+            direction LR
+            SIG_REG["register · user-update · query-user"]
+            SIG_CALL["call-invite · accept · reject · end"]
+            SIG_RTC["offer · answer · ice-candidate"]
+            SIG_MSG["sign-translation · speech-transcript"]
+            SIG_CONTACT["contact-request-notify"]
+        end
+    end
+
+    subgraph DATABASE_LAYER["DATABASE LAYER — MongoDB (Mongoose ODM)"]
+        direction TB
+
+        MONGO[("MongoDB<br/>wesign database")]
+
+        subgraph COLLECTIONS["Collections"]
+            direction LR
+
+            subgraph USER_COL["users"]
+                direction TB
+                U_FIELDS["firstName · lastName · username<br/>phoneNumber · email · dob<br/>password · isDeafMute<br/>deviceTokens[]<br/>contacts[] → User refs<br/>resetToken · timestamps"]
+            end
+
+            subgraph REQ_COL["contactrequests"]
+                direction TB
+                R_FIELDS["fromUserId → User<br/>toUserId → User<br/>status: pending | accepted<br/>rejected | cancelled<br/>timestamps"]
+            end
+
+            subgraph CALL_COL["callsessions"]
+                direction TB
+                C_FIELDS["callerId → User<br/>deafUserId → User<br/>status: ringing | active | ended<br/>transcript[] · startedAt · endedAt"]
+            end
+
+            subgraph CONV_COL["conversations"]
+                direction TB
+                CV_FIELDS["userId → User<br/>locationType · status<br/>messages[] · startedAt · endedAt"]
+            end
+        end
+
+        MONGO --> USER_COL
+        MONGO --> REQ_COL
+        MONGO --> CALL_COL
+        MONGO --> CONV_COL
+    end
+
+    FE_FEATURES -->|"HTTP REST<br/>/api/*"| EXPRESS_CORE
+    EXPRESS_CORE --> MIDDLEWARE
+    MIDDLEWARE --> API_ROUTER
+
+    UC --> SERVICES
+    CRC --> SERVICES
+    CC --> SERVICES
+    CVC --> SERVICES
+
+    UC --> MONGO
+    CRC --> MONGO
+    CC --> MONGO
+    CVC --> MONGO
+
+    FE_FEATURES <-->|"Socket.io"| SOCKETIO
+    FE_FEATURES <-->|"WSS Signaling"| SIGNALING
+
+    CC -.->|"notifyIncomingCall"| NOTIFY
+    NOTIFY -.-> USER_COL
+
+    classDef clientStyle fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef backendStyle fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef realtimeStyle fill:#fef9c3,stroke:#ca8a04,stroke-width:2px,color:#713f12
+    classDef dbStyle fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#581c87
+    classDef mongoStyle fill:#ede9fe,stroke:#7c3aed,stroke-width:3px,color:#4c1d95
+
+    class FE,FE_FEATURES clientStyle
+    class HELMET,CORS,MORGAN,RATE,SWAGGER,JSON,AUTH,VALIDATE,UR,UC,CRC,CR,CC,CVR,CVC,TOKENS,NOTIFY,VIEWS backendStyle
+    class SIO_JOIN,SIO_WEBRTC,SIO_STREAM,SIG_REG,SIG_CALL,SIG_RTC,SIG_MSG,SIG_CONTACT realtimeStyle
+    class U_FIELDS,R_FIELDS,C_FIELDS,CV_FIELDS dbStyle
+    class MONGO mongoStyle

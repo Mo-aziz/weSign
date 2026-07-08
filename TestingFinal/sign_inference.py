@@ -259,6 +259,28 @@ def preprocess_bgr_frame(frame: np.ndarray, clahe: cv2.CLAHE) -> np.ndarray:
 # ── Per-user state + shared inference engine ───────────────────────────────────
 
 
+class SessionDetectors:
+    """MediaPipe detectors + CLAHE owned by a single client session.
+
+    MediaPipe VIDEO-mode landmarkers keep an internal, monotonic timestamp
+    clock and temporal tracking state, and are not thread-safe. Sharing one set
+    across concurrent sessions (e.g. two deaf users on the same call) corrupts
+    tracking and triggers "timestamp must be monotonically increasing" errors,
+    so every session gets its own isolated bundle.
+    """
+
+    def __init__(self) -> None:
+        self.pose_detector, self.hand_detector, self.face_detector = build_detectors()
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+    def close(self) -> None:
+        for detector in (self.pose_detector, self.hand_detector, self.face_detector):
+            try:
+                detector.close()
+            except Exception:
+                pass
+
+
 class SignRecognitionState:
     """Frame-sequence state for one client session."""
 
@@ -272,6 +294,9 @@ class SignRecognitionState:
         self.confidence = 0.0
         self.hand_visible_frames = 0
         self.auto_trigger_armed = True
+        # Detectors are built lazily by the engine on first frame so that each
+        # session runs its own isolated MediaPipe tracker.
+        self.detectors: SessionDetectors | None = None
 
     def reset(self) -> None:
         if self.state != "calibrating":
@@ -286,9 +311,20 @@ class SignRecognitionState:
         self._timestamp_ms += 33
         return self._timestamp_ms
 
+    def close(self) -> None:
+        if self.detectors is not None:
+            self.detectors.close()
+            self.detectors = None
+
 
 class SignInferenceEngine:
-    """Loads the model once and processes frames for many session states."""
+    """Loads the model once and processes frames for many session states.
+
+    The LSTM model is shared (read-only inference is thread-safe), but each
+    session owns its own MediaPipe detectors so concurrent calls (e.g. two deaf
+    users signing at the same time) never share tracker state or a timestamp
+    clock.
+    """
 
     def __init__(self) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -300,13 +336,15 @@ class SignInferenceEngine:
         self.model.load_state_dict(ckpt["model_state"])
         self.model.eval()
 
-        self.pose_detector, self.hand_detector, self.face_detector = build_detectors()
-        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-
     def close(self) -> None:
-        self.pose_detector.close()
-        self.hand_detector.close()
-        self.face_detector.close()
+        # Per-session detectors are released when their sessions expire.
+        return None
+
+    @staticmethod
+    def _ensure_detectors(session: SignRecognitionState) -> SessionDetectors:
+        if session.detectors is None:
+            session.detectors = SessionDetectors()
+        return session.detectors
 
     @staticmethod
     def _response(
@@ -328,15 +366,16 @@ class SignInferenceEngine:
         }
 
     def process_bgr_frame(self, session: SignRecognitionState, frame: np.ndarray) -> dict[str, Any]:
-        frame = preprocess_bgr_frame(frame, self.clahe)
+        detectors = self._ensure_detectors(session)
+        frame = preprocess_bgr_frame(frame, detectors.clahe)
 
         timestamp_ms = session.next_timestamp_ms()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        pose_result = self.pose_detector.detect_for_video(mp_image, timestamp_ms)
-        hand_result = self.hand_detector.detect_for_video(mp_image, timestamp_ms)
-        face_result = self.face_detector.detect_for_video(mp_image, timestamp_ms)
+        pose_result = detectors.pose_detector.detect_for_video(mp_image, timestamp_ms)
+        hand_result = detectors.hand_detector.detect_for_video(mp_image, timestamp_ms)
+        face_result = detectors.face_detector.detect_for_video(mp_image, timestamp_ms)
 
         pose, _pose_detected = extract_pose(pose_result)
         lhand, rhand, ldet, rdet = extract_hands(hand_result)
